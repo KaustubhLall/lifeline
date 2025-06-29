@@ -16,7 +16,7 @@ git clone https://github.com/your-org/lifeline-agent && cd lifeline-agent
 # 2. Start example Gmail + Calendar servers
 npx @gongrzhe/server-gmail-autoauth-mcp
 docker run -p 8001:8000 mcp/calendar
-
+will
 # 3. Launch the agent (CLI)
 poetry install
 python lifeline_agent/agent.py
