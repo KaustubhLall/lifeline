@@ -1,4 +1,6 @@
 from django.urls import path
+
+from .views.login import LoginView, RegisterView
 from .views.views import (
     ConversationListCreateView,
     ConversationDetailView,
@@ -6,7 +8,6 @@ from .views.views import (
     NoteView,
     TranscriptionView
 )
-from .views.login import LoginView, RegisterView
 
 urlpatterns = [
     path('login/', LoginView.as_view(), name='login'),

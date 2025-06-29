@@ -132,13 +132,21 @@ CORS_ORIGIN_WHITELIST = [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
     'http://192.168.86.47:3000',
-    'http://10.5.0.2:3000',  # Add the new network IP
+    'http://10.5.0.2:3000',
+    'https://localhost:3000',
+    'https://127.0.0.1:3000',
+    'https://192.168.86.47:3000',
+    'https://10.5.0.2:3000',
 ]
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
     'http://192.168.86.47:3000',
-    'http://10.5.0.2:3000',  # Add the new network IP
+    'http://10.5.0.2:3000',
+    'https://localhost:3000',
+    'https://127.0.0.1:3000',
+    'https://192.168.86.47:3000',
+    'https://10.5.0.2:3000',
 ]
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = [
@@ -160,6 +168,15 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
 ]
+
+# Additional security settings for mixed content
+SECURE_CROSS_ORIGIN_OPENER_POLICY = None
+SECURE_REFERRER_POLICY = None
+
+# Allow mixed content for development (HTTPS frontend calling HTTP backend)
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True
+    CORS_ALLOW_CREDENTIALS = True
 
 # Rest Framework settings
 REST_FRAMEWORK = {

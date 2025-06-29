@@ -117,11 +117,55 @@ function ChatWindow({messages, userId, username}) {
 }
 
 function isSTTSupported() {
-    return (
-        typeof window !== 'undefined' &&
-        ('mediaDevices' in navigator && 'getUserMedia' in navigator.mediaDevices) &&
-        typeof MediaRecorder !== 'undefined'
-    );
+    // Check basic browser support first
+    const hasMediaDevices = typeof window !== 'undefined' &&
+        ('mediaDevices' in navigator && 'getUserMedia' in navigator.mediaDevices);
+
+    const hasMediaRecorder = typeof MediaRecorder !== 'undefined';
+
+    // Detect mobile Safari specifically
+    const isMobileSafari = /iPhone|iPad|iPod/.test(navigator.userAgent) && /Safari/.test(navigator.userAgent);
+    const isAndroid = /Android/.test(navigator.userAgent);
+    const isMobile = isMobileSafari || isAndroid || /Mobile/.test(navigator.userAgent);
+
+    // Check if we're in a secure context (HTTPS or localhost)
+    const isSecureContext = window.isSecureContext || window.location.protocol === 'https:' ||
+                           window.location.hostname === 'localhost' ||
+                           window.location.hostname === '127.0.0.1';
+
+    // For local network IPs, only allow on desktop browsers or with HTTPS
+    const isLocalNetworkIP = window.location.hostname.startsWith('192.168.') ||
+                            window.location.hostname.startsWith('10.') ||
+                            window.location.hostname.startsWith('172.');
+
+    // Log detailed support information for debugging
+    console.log('STT Support Check:', {
+        hasMediaDevices,
+        hasMediaRecorder,
+        isSecureContext,
+        isLocalNetworkIP,
+        isMobileSafari,
+        isAndroid,
+        isMobile,
+        protocol: window.location.protocol,
+        hostname: window.location.hostname,
+        userAgent: navigator.userAgent
+    });
+
+    // Mobile Safari on local network IPs requires HTTPS
+    if (isMobileSafari && isLocalNetworkIP && !isSecureContext) {
+        console.warn('Mobile Safari detected on local network without HTTPS - microphone access blocked by browser security policy');
+        return false;
+    }
+
+    // For local development, be more permissive on desktop but warn about security
+    const basicSupport = hasMediaDevices && hasMediaRecorder;
+
+    if (basicSupport && !isSecureContext && !isMobile) {
+        console.warn('Speech Recognition: Running in non-secure context. HTTPS is recommended for production.');
+    }
+
+    return basicSupport;
 }
 
 function ChatInput({onSend, onSTT, input, setInput, sttActive, sttSupported}) {
@@ -362,45 +406,61 @@ function App() {
         }
     };
 
-    // Pre-warm microphone on component mount for instant recording
+    // Mobile-friendly microphone initialization
     useEffect(() => {
         if (authenticated && sttSupported) {
-            const initializeMicrophone = async () => {
-                try {
-                    // Pre-request microphone access and keep stream ready
-                    const stream = await navigator.mediaDevices.getUserMedia({
-                        audio: {
-                            sampleRate: 48000,
-                            channelCount: 1,
-                            echoCancellation: true,
-                            noiseSuppression: true,
-                            autoGainControl: true,
-                            latency: 0.01,
-                            volume: 1.0
-                        }
-                    });
-                    mediaStreamRef.current = stream;
-                    console.log('Microphone pre-warmed and ready for instant recording');
-                } catch (error) {
-                    console.log('Microphone pre-warm failed (user may not have granted permission yet):', error);
-                }
-            };
+            // Don't pre-warm on mobile to avoid permission issues
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
-            initializeMicrophone();
+            if (!isMobile) {
+                const initializeMicrophone = async () => {
+                    try {
+                        // Only pre-warm on desktop with basic constraints
+                        const stream = await navigator.mediaDevices.getUserMedia({
+                            audio: {
+                                echoCancellation: true,
+                                noiseSuppression: true,
+                                autoGainControl: true
+                            }
+                        });
+                        mediaStreamRef.current = stream;
+                        console.log('Desktop microphone pre-warmed successfully');
+                    } catch (error) {
+                        console.log('Desktop microphone pre-warm failed (user may not have granted permission yet):', error);
+                    }
+                };
+                initializeMicrophone();
+            } else {
+                console.log('Mobile device detected - skipping microphone pre-warming to avoid permission issues');
+            }
         }
 
         // Cleanup on unmount
         return () => {
             if (mediaStreamRef.current) {
                 mediaStreamRef.current.getTracks().forEach(track => track.stop());
+                mediaStreamRef.current = null;
             }
         };
     }, [authenticated, sttSupported]);
 
-    // Instant Recording Speech-to-Text with pre-warmed microphone
+    // Mobile-optimized Speech-to-Text with better error handling
     const handleSTT = async () => {
         if (!sttSupported) {
-            setError('Speech Recognition not supported in this browser. Please use Chrome, Edge, or Safari.');
+            const isMobileSafari = /iPhone|iPad|iPod/.test(navigator.userAgent) && /Safari/.test(navigator.userAgent);
+            const isLocalNetworkIP = window.location.hostname.startsWith('192.168.') ||
+                                    window.location.hostname.startsWith('10.') ||
+                                    window.location.hostname.startsWith('172.');
+            const isHTTPS = window.location.protocol === 'https:';
+            const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+            if (isMobileSafari && isLocalNetworkIP && !isHTTPS) {
+                setError('🔒 Mobile Safari requires HTTPS for microphone access on local networks. Please:\n\n• Use HTTPS (set HTTPS=true when starting the dev server)\n• Or access via ngrok for a secure tunnel\n• Or test on desktop for development');
+            } else if (!isHTTPS && !isLocalhost) {
+                setError('Speech Recognition requires HTTPS. Please access the site via HTTPS or use localhost.');
+            } else {
+                setError('Speech Recognition not supported in this browser. Please use Chrome, Edge, or Safari.');
+            }
             return;
         }
 
@@ -415,30 +475,48 @@ function App() {
         }
 
         try {
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
             let stream = mediaStreamRef.current;
 
-            // If no pre-warmed stream, create one now
-            if (!stream || !stream.active) {
-                stream = await navigator.mediaDevices.getUserMedia({
-                    audio: {
-                        sampleRate: 48000,
-                        channelCount: 1,
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        autoGainControl: true,
-                        latency: 0.01,
-                        volume: 1.0
-                    }
-                });
+            // Mobile-friendly audio constraints
+            const audioConstraints = isMobile ? {
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true,
+                    // Remove mobile-problematic constraints
+                    // sampleRate, latency, volume often cause issues on mobile
+                }
+            } : {
+                audio: {
+                    sampleRate: 48000,
+                    channelCount: 1,
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true,
+                    latency: 0.01,
+                    volume: 1.0
+                }
+            };
+
+            // Always request fresh stream on mobile, use cached on desktop
+            if (!stream || !stream.active || isMobile) {
+                console.log(`Requesting microphone access (${isMobile ? 'mobile' : 'desktop'} mode)`);
+                stream = await navigator.mediaDevices.getUserMedia(audioConstraints);
                 mediaStreamRef.current = stream;
             }
 
-            // Create MediaRecorder with proper format preferences
+            // Mobile-compatible MediaRecorder setup
             let mediaRecorder;
             let mimeType = '';
 
-            // Try formats in order of preference for Whisper API
-            const formats = [
+            // Different format preferences for mobile vs desktop
+            const formats = isMobile ? [
+                'audio/webm',
+                'audio/mp4',
+                'audio/ogg',
+                'audio/wav'
+            ] : [
                 'audio/webm;codecs=opus',
                 'audio/mp4',
                 'audio/webm',
@@ -448,6 +526,7 @@ function App() {
             for (const format of formats) {
                 if (MediaRecorder.isTypeSupported(format)) {
                     mimeType = format;
+                    console.log(`Selected audio format: ${format} (${isMobile ? 'mobile' : 'desktop'} mode)`);
                     break;
                 }
             }
@@ -455,24 +534,27 @@ function App() {
             if (!mimeType) {
                 mediaRecorder = new MediaRecorder(stream);
                 mimeType = mediaRecorder.mimeType;
+                console.log(`Using browser default format: ${mimeType}`);
             } else {
-                mediaRecorder = new MediaRecorder(stream, {
-                    mimeType,
-                    audioBitsPerSecond: 128000
-                });
+                const recorderOptions = isMobile ?
+                    { mimeType } : // Mobile: basic options only
+                    { mimeType, audioBitsPerSecond: 128000 }; // Desktop: can handle bitrate setting
+
+                mediaRecorder = new MediaRecorder(stream, recorderOptions);
             }
             
             const audioChunks = [];
             let recordingStartTime = Date.now();
-            console.log('Starting INSTANT recording with pre-warmed mic, MIME type:', mimeType);
+            console.log(`Starting recording (${isMobile ? 'mobile' : 'desktop'} optimized), MIME type: ${mimeType}`);
 
             // Set recording state BEFORE starting
             setSttActive(true);
             isRecordingRef.current = true;
             recognitionRef.current = mediaRecorder;
 
-            // Start recording INSTANTLY with pre-warmed microphone
-            mediaRecorder.start(10); // Ultra-frequent collection (10ms) for maximum responsiveness
+            // Mobile-friendly data collection interval
+            const dataInterval = isMobile ? 100 : 10; // Less frequent on mobile to reduce processing load
+            mediaRecorder.start(dataInterval);
 
             mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0 && isRecordingRef.current) {
@@ -484,9 +566,10 @@ function App() {
                 const totalDuration = Date.now() - recordingStartTime;
 
                 try {
-                    // Check minimum recording duration
-                    if (totalDuration < 300 || audioChunks.length === 0) {
-                        setError('Recording too short. Please hold the button longer and speak clearly.');
+                    // More lenient minimum duration for mobile
+                    const minDuration = isMobile ? 500 : 300;
+                    if (totalDuration < minDuration || audioChunks.length === 0) {
+                        setError(`Recording too short. Please hold the button for at least ${minDuration/1000} seconds and speak clearly.`);
                         setSttActive(false);
                         return;
                     }
@@ -498,11 +581,13 @@ function App() {
                         size: audioBlob.size,
                         type: audioBlob.type,
                         duration: totalDuration,
-                        chunks: audioChunks.length
+                        chunks: audioChunks.length,
+                        platform: isMobile ? 'mobile' : 'desktop'
                     });
 
-                    // Check blob size
-                    if (audioBlob.size < 1500) {
+                    // More lenient minimum size for mobile recordings
+                    const minSize = isMobile ? 1000 : 1500;
+                    if (audioBlob.size < minSize) {
                         setError('Recording failed or too short. Please try again and speak louder.');
                         setSttActive(false);
                         return;
@@ -514,16 +599,18 @@ function App() {
                         try {
                             const base64Audio = reader.result.split(',')[1];
                             
-                            // DEBUG: Save audio file for inspection
-                            const debugAudioUrl = URL.createObjectURL(audioBlob);
-                            const debugLink = document.createElement('a');
-                            debugLink.href = debugAudioUrl;
-                            debugLink.download = `debug_audio_${Date.now()}.webm`;
-                            debugLink.style.display = 'none';
-                            document.body.appendChild(debugLink);
-                            debugLink.click();
-                            document.body.removeChild(debugLink);
-                            console.log('Debug: Audio file saved for inspection');
+                            // Skip debug file download on mobile to avoid issues
+                            if (!isMobile) {
+                                const debugAudioUrl = URL.createObjectURL(audioBlob);
+                                const debugLink = document.createElement('a');
+                                debugLink.href = debugAudioUrl;
+                                debugLink.download = `debug_audio_${Date.now()}.webm`;
+                                debugLink.style.display = 'none';
+                                document.body.appendChild(debugLink);
+                                debugLink.click();
+                                document.body.removeChild(debugLink);
+                                console.log('Debug: Audio file saved for inspection');
+                            }
 
                             const response = await fetchWithAuth(`${API_BASE}/transcribe/`, {
                                 method: 'POST',
@@ -568,7 +655,12 @@ function App() {
                 } finally {
                     setSttActive(false);
                     isRecordingRef.current = false;
-                    // Keep the stream alive for next recording
+
+                    // On mobile, close the stream after recording to free resources
+                    if (isMobile && mediaStreamRef.current) {
+                        mediaStreamRef.current.getTracks().forEach(track => track.stop());
+                        mediaStreamRef.current = null;
+                    }
                 }
             };
 
@@ -579,9 +671,8 @@ function App() {
                 isRecordingRef.current = false;
             };
 
-            // Immediate start confirmation
             mediaRecorder.onstart = () => {
-                console.log('Recording started INSTANTLY with pre-warmed microphone');
+                console.log('Recording started successfully');
             };
 
         } catch (error) {
@@ -590,13 +681,15 @@ function App() {
             console.error('Microphone access error:', error);
 
             if (error.name === 'NotAllowedError') {
-                setError('Microphone access denied. Please allow microphone access and reload the page.');
+                setError('Microphone access denied. Please allow microphone access in your browser settings and reload the page.');
             } else if (error.name === 'NotFoundError') {
                 setError('No microphone found. Please connect a microphone and try again.');
             } else if (error.name === 'NotSupportedError') {
                 setError('Audio recording not supported in this browser. Please use Chrome, Edge, or Safari.');
+            } else if (error.name === 'NotReadableError') {
+                setError('Microphone is being used by another application. Please close other apps using the microphone.');
             } else {
-                setError('Failed to start audio recording. Please check your microphone and try again.');
+                setError(`Failed to start audio recording: ${error.message}. Please check your microphone and try again.`);
             }
         }
     };
