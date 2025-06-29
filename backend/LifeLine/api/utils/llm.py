@@ -1,9 +1,27 @@
-# implement the following APIs for OAI
-# assume API key is set in the environment variable OPENAI_API_KEY
+import os
+import openai
 
-# call_llm_text
+def call_llm_text(prompt, model="gpt-3.5-turbo", temperature=0.7):
+    openai.api_key = os.getenv("OPENAI_API_KEY")
+    response = openai.ChatCompletion.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=temperature,
+    )
+    return response.choices[0].message["content"]
 
-# call_llm_transcribe (STT)
+def call_llm_transcribe(audio_file_path, model="whisper-1"):
+    openai.api_key = os.getenv("OPENAI_API_KEY")
+    with open(audio_file_path, "rb") as audio_file:
+        transcript = openai.Audio.transcribe(model, audio_file)
+    return transcript["text"]
 
-# call_llm_TTS (TTS)
-
+def call_llm_TTS(text, model="tts-1", voice="alloy"):
+    openai.api_key = os.getenv("OPENAI_API_KEY")
+    response = openai.Audio.create(
+        model=model,
+        input=text,
+        voice=voice,
+        response_format="mp3"
+    )
+    return response
