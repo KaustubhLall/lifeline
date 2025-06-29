@@ -312,6 +312,8 @@
   .header {
     padding: 0.5rem 0.75rem;
     height: 60px;
+    min-height: 60px;
+    flex-wrap: nowrap;
   }
 
   .main-content-mobile {
@@ -326,6 +328,7 @@
     padding: 8px 12px;
     font-size: 0.9rem;
     min-width: auto;
+    white-space: nowrap;
   }
 
   .menu-button:hover {
@@ -338,28 +341,48 @@
     gap: 10px;
     background: var(--secondary-bg);
     border-top: 2px solid var(--border-color);
+    min-height: 68px;
   }
 
   .chat-input-container .form-control {
     height: 44px;
     font-size: 1rem;
     border-radius: 8px;
+    flex: 1;
   }
 
   .sidebar {
     padding-top: 60px !important;
+    width: 85vw !important;
+    max-width: 320px;
   }
 
   /* Better mobile dropdown */
+  .mobile-dropdown {
+    position: relative;
+  }
+
   .mobile-dropdown-content {
+    position: absolute;
     right: 0;
     top: calc(100% + 0.25rem);
-    width: 260px;
+    width: 280px;
+    max-width: calc(100vw - 2rem);
     background-color: var(--secondary-bg);
     border: 2px solid var(--border-color);
     border-radius: 12px;
     padding: 1rem;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    display: none;
+    z-index: 1051;
+  }
+
+  .mobile-dropdown-content.show {
+    display: block;
+  }
+
+  .mobile-dropdown-content .form-group {
+    margin-bottom: 1rem;
   }
 
   .mobile-dropdown-content .btn {
@@ -367,17 +390,45 @@
     padding: 8px 12px;
     border-radius: 6px;
   }
+
+  /* Ensure chat window doesn't get cut off */
+  .chat-window {
+    padding-bottom: 80px;
+  }
+
+  /* Fix message layout on mobile */
+  .message {
+    max-width: 85%;
+    font-size: 0.9rem;
+  }
+
+  .message-header {
+    font-size: 0.8rem;
+  }
+
+  /* Better touch targets */
+  .list-group-item {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+  }
 }
 
 /* Enhanced mobile layout for very small screens */
 @media (max-width: 480px) {
   .header {
-    padding: 0.5rem;
-    height: 55px;
+    padding: 0.4rem 0.5rem;
+    height: 56px;
+    min-height: 56px;
   }
 
   .main-content-mobile {
-    padding-top: 55px !important;
+    padding-top: 56px !important;
+  }
+
+  .menu-button {
+    padding: 6px 10px;
+    font-size: 0.85rem;
   }
 
   .menu-button span {
@@ -385,31 +436,50 @@
   }
 
   .settings-button {
-    min-width: 40px;
-    height: 40px;
+    min-width: 36px;
+    height: 36px;
   }
 
   .chat-input-container {
     padding: 8px !important;
+    min-height: 60px;
   }
 
   .stt-button, .send-button {
-    width: 40px !important;
-    height: 40px !important;
+    width: 36px !important;
+    height: 36px !important;
+  }
+
+  .chat-input-container .form-control {
+    height: 36px;
+    font-size: 0.9rem;
   }
 
   .mobile-dropdown-content {
-    width: calc(100vw - 2rem);
-    right: 1rem;
-    left: 1rem;
+    width: calc(100vw - 1rem);
+    right: 0.5rem;
+    left: 0.5rem;
+    max-width: none;
   }
 
   .sidebar {
-    padding-top: 55px !important;
+    padding-top: 56px !important;
+    width: 90vw !important;
+  }
+
+  .message {
+    max-width: 90%;
+    padding: 10px 14px;
+    font-size: 0.85rem;
+  }
+
+  .chat-window {
+    padding: 0.5rem;
+    padding-bottom: 70px;
   }
 }
 
-/* Fix z-index issues */
+/* Fix z-index issues and ensure proper stacking */
 .mobile-dropdown {
   position: relative;
   z-index: 1050;
@@ -424,29 +494,30 @@
   animation: fadeInDown 0.2s ease-out;
 }
 
-@keyframes fadeInDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
+/* Ensure sidebar works properly on mobile */
+.sidebar.show {
+  transform: translateX(0) !important;
+}
+
+/* Better mobile chat layout */
+@media (max-width: 768px) {
+  .flex-grow-1.d-flex.overflow-hidden {
+    padding-top: 60px;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+
+  .flex-grow-1.d-flex.flex-column {
+    min-height: calc(100vh - 60px);
   }
 }
 
-/* Better form styling */
-.form-control:focus {
-  background: var(--secondary-bg) !important;
-  border-color: var(--message-user) !important;
-  color: var(--text-primary) !important;
-  box-shadow: 0 0 0 3px rgba(42, 111, 219, 0.15) !important;
-}
+@media (max-width: 480px) {
+  .flex-grow-1.d-flex.overflow-hidden {
+    padding-top: 56px;
+  }
 
-/* Ensure proper text visibility */
-.model-selector option, .mode-selector option {
-  background: var(--secondary-bg);
-  color: var(--text-primary);
+  .flex-grow-1.d-flex.flex-column {
+    min-height: calc(100vh - 56px);
+  }
 }
 
 /* Professional animations */

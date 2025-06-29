@@ -12,11 +12,15 @@ function Login({ onLogin, onSwitchToSignup }) {
     setError(null);
     setIsLoading(true);
 
+    console.log('=== LOGIN DEBUG START ===');
+    console.log('Config API URL:', config.API_URL);
+    console.log('Window location:', window.location.href);
     console.log('Attempting login...');
 
     try {
       const loginUrl = `${config.API_URL}/api/login/`;
-      console.log('Making login request to:', loginUrl);
+      console.log('Login URL:', loginUrl);
+      console.log('Request payload:', { username, password: '***' });
 
       const response = await fetch(loginUrl, {
         method: 'POST',
@@ -26,24 +30,57 @@ function Login({ onLogin, onSwitchToSignup }) {
         body: JSON.stringify({ username, password }),
       });
 
-      console.log('Login response status:', response.status);
-      const contentType = response.headers.get("content-type");
-      console.log('Response content type:', contentType);
+      console.log('Response status:', response.status);
+      console.log('Response ok:', response.ok);
+      console.log('Response headers:', [...response.headers.entries()]);
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Login failed. Server response:', errorText);
-        throw new Error(`Login failed: ${response.status}`);
+        let errorData;
+        try {
+          const responseText = await response.text();
+          console.log('Error response text:', responseText);
+          errorData = responseText ? JSON.parse(responseText) : { detail: `HTTP ${response.status}` };
+        } catch (parseError) {
+          console.log('Failed to parse error response:', parseError);
+          errorData = { detail: `HTTP ${response.status}: ${response.statusText}` };
+        }
+        console.error('Login failed. Server response:', errorData);
+        throw new Error(errorData.detail || `Login failed: ${response.status}`);
       }
 
       const data = await response.json();
       console.log('Login successful, received data:', data);
+
+      // Validate response data
+      if (!data.token || !data.user_id || !data.username) {
+        console.error('Invalid login response data:', data);
+        throw new Error('Invalid response from server');
+      }
+
+      console.log('=== LOGIN SUCCESS ===');
       onLogin(data);
     } catch (err) {
-      console.error('Login error:', err);
-      setError('Login failed. Please check your credentials and try again.');
+      console.error('=== LOGIN ERROR ===');
+      console.error('Error details:', err);
+      console.error('Error message:', err.message);
+      console.error('Error stack:', err.stack);
+
+      let errorMessage = 'Login failed. Please try again.';
+
+      if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || err.name === 'TypeError') {
+        errorMessage = `Network error: Cannot connect to server at ${config.API_URL}. Please check if the backend server is running.`;
+      } else if (err.message.includes('401')) {
+        errorMessage = 'Invalid username or password.';
+      } else if (err.message.includes('500')) {
+        errorMessage = 'Server error. Please try again later.';
+      } else {
+        errorMessage = err.message || 'Login failed. Please try again.';
+      }
+
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
+      console.log('=== LOGIN DEBUG END ===');
     }
   };
 

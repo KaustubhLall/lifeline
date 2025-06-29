@@ -222,6 +222,8 @@ function App() {
         setConversations([]);
         setCurrentId(null);
         setMessages([]);
+        setShowSidebar(false);
+        setShowMobileMenu(false);
     };
 
     // Close mobile menu when clicking outside
@@ -230,11 +232,14 @@ function App() {
             if (showMobileMenu && !event.target.closest('.mobile-dropdown')) {
                 setShowMobileMenu(false);
             }
+            if (showSidebar && !event.target.closest('.sidebar') && !event.target.closest('.menu-button')) {
+                setShowSidebar(false);
+            }
         };
 
         document.addEventListener('click', handleClickOutside);
         return () => document.removeEventListener('click', handleClickOutside);
-    }, [showMobileMenu]);
+    }, [showMobileMenu, showSidebar]);
 
     const handleNewChat = async () => {
         try {

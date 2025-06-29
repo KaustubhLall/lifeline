@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import config from './config';
 
 function SignUp({ onLogin }) {
   const [formData, setFormData] = useState({
@@ -21,7 +22,6 @@ function SignUp({ onLogin }) {
     e.preventDefault();
     setError(null);
     setIsLoading(true);
-    console.log('Starting signup process...');
 
     if (formData.password !== formData.confirmPassword) {
       setError("Passwords don't match");
@@ -29,9 +29,15 @@ function SignUp({ onLogin }) {
       return;
     }
 
+    console.log('=== SIGNUP DEBUG START ===');
+    console.log('Config API URL:', config.API_URL);
+    console.log('Window location:', window.location.href);
+
     try {
-      console.log('Making registration request...');
-      const response = await fetch('/api/register/', {
+      const registerUrl = `${config.API_URL}/api/register/`;
+      console.log('Registration URL:', registerUrl);
+
+      const response = await fetch(registerUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -44,45 +50,44 @@ function SignUp({ onLogin }) {
       });
 
       console.log('Registration response status:', response.status);
-      const contentType = response.headers.get("content-type");
-      console.log('Response content type:', contentType);
+      console.log('Registration response ok:', response.ok);
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Registration failed. Server response:', errorText);
-        throw new Error('Registration failed');
+        const responseText = await response.text();
+        console.log('Error response text:', responseText);
+        let errorData;
+        try {
+          errorData = responseText ? JSON.parse(responseText) : { detail: 'Registration failed' };
+        } catch {
+          errorData = { detail: `Registration failed: ${response.status}` };
+        }
+        console.error('Registration failed:', errorData);
+        throw new Error(errorData.detail || 'Registration failed');
       }
 
       const data = await response.json();
-      console.log('Registration successful, attempting login...');
+      console.log('Registration successful:', data);
+      console.log('=== SIGNUP SUCCESS ===');
 
-      // Login automatically after successful registration
-      const loginResponse = await fetch('/api/login/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          username: formData.username,
-          password: formData.password,
-        }),
-      });
+      // Call onLogin with the registration data directly
+      onLogin(data);
 
-      console.log('Login response status:', loginResponse.status);
+    } catch (err) {
+      console.error('=== SIGNUP ERROR ===');
+      console.error('Error details:', err);
 
-      if (!loginResponse.ok) {
-        throw new Error('Login after registration failed');
+      let errorMessage = 'Registration failed. Please try again.';
+
+      if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError') || err.name === 'TypeError') {
+        errorMessage = `Network error: Cannot connect to server at ${config.API_URL}. Please check if the backend server is running.`;
+      } else {
+        errorMessage = err.message || 'Registration failed. Please try again.';
       }
 
-      const loginData = await loginResponse.json();
-      localStorage.setItem('authToken', loginData.token);
-      console.log('Auto-login successful');
-      onLogin(loginData.token);
-    } catch (err) {
-      console.error('Signup/Login error:', err);
-      setError(err.message || 'Registration failed. Please try again.');
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
+      console.log('=== SIGNUP DEBUG END ===');
     }
   };
 

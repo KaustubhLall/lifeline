@@ -104,8 +104,15 @@ class LoginView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
+        # Get or create token - ensure we always have a valid token
         token, created = Token.objects.get_or_create(user=user)
-        logger.info(f"Successful login for user: {username} (ID: {user.id}) - Token {'created' if created else 'retrieved'}")
+
+        # If token already existed, regenerate it to ensure it's fresh
+        if not created:
+            token.delete()
+            token = Token.objects.create(user=user)
+
+        logger.info(f"Successful login for user: {username} (ID: {user.id}) - Fresh token created")
 
         return Response({
             'token': token.key,
