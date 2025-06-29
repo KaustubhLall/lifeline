@@ -1,0 +1,16 @@
+# python 3.12
+# server
+django
+djangorestframework
+django-cors-headers
+
+# ai
+openai
+langchain
+langgraph
+
+# comms
+twilio
+
+
+# connectors
