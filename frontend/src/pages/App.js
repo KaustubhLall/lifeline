@@ -1,211 +1,13 @@
 import React, {useEffect, useRef, useState} from 'react';
-import './App.css';
+import '../styles/App.css';
 import 'bootstrap/dist/css/bootstrap.min.css';
-import Login from './Login';
-import SignUp from './SignUp';
-import config from './config';
-
-// API endpoints
-const API_BASE = `${config.API_URL}/api`;
-
-// Helper function to add auth headers
-const fetchWithAuth = async (url, options = {}) => {
-    const token = localStorage.getItem('authToken');
-    try {
-        const response = await fetch(url, {
-            ...options,
-            headers: {
-                ...options.headers,
-                'Authorization': `Token ${token}`,
-                'Content-Type': 'application/json',
-            },
-        });
-
-        console.log(`API ${options.method || 'GET'} ${url}:`, {
-            status: response.status,
-            statusText: response.statusText
-        });
-
-        if (!response.ok) {
-            const errorData = await response.text();
-            console.error('Response error:', errorData);
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        return response;
-    } catch (error) {
-        console.error('Fetch error:', error);
-        throw error;
-    }
-};
-
-function ChatSidebar({conversations, currentId, onSelect, onNewChat}) {
-    return (
-        <div className="list-group list-group-flush overflow-auto" style={{height: '100vh'}}>
-            <button
-                className="list-group-item list-group-item-action text-center fw-bold bg-primary text-white"
-                onClick={onNewChat}
-            >
-                New Chat +
-            </button>
-            {conversations.length === 0 ? (
-                <div className="list-group-item text-center text-muted">
-                    No conversations yet
-                </div>
-            ) : (
-                conversations.map(conv => (
-                    <button
-                        key={conv.id}
-                        className={`list-group-item list-group-item-action${conv.id === currentId ? ' active' : ''}`}
-                        onClick={() => onSelect(conv.id)}
-                    >
-                        {conv.title || `Chat #${conv.id}`}
-                    </button>
-                ))
-            )}
-        </div>
-    );
-}
-
-function ChatWindow({messages, userId, username}) {
-    const bottomRef = useRef(null);
-    useEffect(() => {
-        bottomRef.current?.scrollIntoView({behavior: 'smooth'});
-    }, [messages]);
-
-    const formatTime = (timestamp) => {
-        if (!timestamp) return '';
-        return new Date(timestamp).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
-    };
-
-    return (
-        <div className="flex-grow-1 overflow-auto px-3 py-4 chat-window" style={{minHeight: 0}}>
-            {messages.map(msg => (
-                <div key={msg.id} className="message-container">
-                    <div className={`message-header ${!msg.is_bot ? 'user' : 'bot'}`}>
-                        <div className="d-flex align-items-center gap-2">
-                            {!msg.is_bot ? (
-                                <>
-                                    <span>{username || 'User'}</span>
-                                    <i className="bi bi-person-circle"></i>
-                                </>
-                            ) : (
-                                <>
-                                    <i className="bi bi-robot"></i>
-                                    <span>AI Assistant</span>
-                                </>
-                            )}
-                        </div>
-                        <span className="message-timestamp">{formatTime(msg.created_at)}</span>
-                    </div>
-                    <div className={`d-flex ${!msg.is_bot ? 'justify-content-end' : 'justify-content-start'}`}>
-                        <div
-                            className={`message ${!msg.is_bot ? 'user' : 'bot'} ${msg.pending ? 'pending' : ''} ${msg.error ? 'error' : ''}`}>
-                            {msg.content}
-                            {msg.pending && (
-                                <div className="spinner-border spinner-border-sm ms-2" role="status">
-                                    <span className="visually-hidden">Loading...</span>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            ))}
-            <div ref={bottomRef}/>
-        </div>
-    );
-}
-
-function isSTTSupported() {
-    // Check basic browser support first
-    const hasMediaDevices = typeof window !== 'undefined' &&
-        ('mediaDevices' in navigator && 'getUserMedia' in navigator.mediaDevices);
-
-    const hasMediaRecorder = typeof MediaRecorder !== 'undefined';
-
-    // Detect mobile Safari specifically
-    const isMobileSafari = /iPhone|iPad|iPod/.test(navigator.userAgent) && /Safari/.test(navigator.userAgent);
-    const isAndroid = /Android/.test(navigator.userAgent);
-    const isMobile = isMobileSafari || isAndroid || /Mobile/.test(navigator.userAgent);
-
-    // Check if we're in a secure context (HTTPS or localhost)
-    const isSecureContext = window.isSecureContext || window.location.protocol === 'https:' ||
-                           window.location.hostname === 'localhost' ||
-                           window.location.hostname === '127.0.0.1';
-
-    // For local network IPs, only allow on desktop browsers or with HTTPS
-    const isLocalNetworkIP = window.location.hostname.startsWith('192.168.') ||
-                            window.location.hostname.startsWith('10.') ||
-                            window.location.hostname.startsWith('172.');
-
-    // Log detailed support information for debugging
-    console.log('STT Support Check:', {
-        hasMediaDevices,
-        hasMediaRecorder,
-        isSecureContext,
-        isLocalNetworkIP,
-        isMobileSafari,
-        isAndroid,
-        isMobile,
-        protocol: window.location.protocol,
-        hostname: window.location.hostname,
-        userAgent: navigator.userAgent
-    });
-
-    // Mobile Safari on local network IPs requires HTTPS
-    if (isMobileSafari && isLocalNetworkIP && !isSecureContext) {
-        console.warn('Mobile Safari detected on local network without HTTPS - microphone access blocked by browser security policy');
-        return false;
-    }
-
-    // For local development, be more permissive on desktop but warn about security
-    const basicSupport = hasMediaDevices && hasMediaRecorder;
-
-    if (basicSupport && !isSecureContext && !isMobile) {
-        console.warn('Speech Recognition: Running in non-secure context. HTTPS is recommended for production.');
-    }
-
-    return basicSupport;
-}
-
-function ChatInput({onSend, onSTT, input, setInput, sttActive, sttSupported}) {
-    return (
-        <form
-            className="d-flex align-items-center gap-2 p-2 border-top bg-transparent chat-input-container"
-            onSubmit={e => {
-                e.preventDefault();
-                onSend();
-            }}
-            style={{position: 'sticky', bottom: 0}}
-        >
-            <button
-                type="button"
-                className={`btn stt-button ${sttActive ? 'active' : ''} ${sttSupported ? '' : 'disabled'}`}
-                onClick={onSTT}
-                title={sttSupported ? (sttActive ? "Recording..." : "Click to speak") : "Speech Recognition not supported"}
-                disabled={!sttSupported}
-            >
-                <img src="/mic.png" alt="Voice"/>
-            </button>
-            <input
-                className="form-control"
-                type="text"
-                placeholder="Type a message..."
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                style={{fontSize: '1rem'}}
-            />
-            <button
-                className="btn btn-primary send-button"
-                type="submit"
-                disabled={!input.trim()}
-                aria-label="Send"
-            >
-                <i className="bi bi-arrow-right"></i>
-            </button>
-        </form>
-    );
-}
+import Login from '../components/Login';
+import SignUp from '../components/SignUp';
+import ChatSidebar from '../components/ChatSidebar';
+import ChatWindow from '../components/ChatWindow';
+import ChatInput from '../components/ChatInput';
+import { fetchWithAuth, API_BASE } from '../utils/apiUtils';
+import { isSTTSupported } from '../utils/speechUtils';
 
 function App() {
     const [authenticated, setAuthenticated] = useState(!!localStorage.getItem('authToken'));
@@ -224,13 +26,13 @@ function App() {
     const [chatMode, setChatMode] = useState('conversational');
     const sttSupported = isSTTSupported();
     const recognitionRef = useRef(null);
-    const mediaStreamRef = useRef(null); // Keep stream active
+    const mediaStreamRef = useRef(null);
     const isRecordingRef = useRef(false);
 
     const models = [
         {value: 'gpt-4.1-nano', label: 'GPT-4.1 Nano'},
-        {value: 'gpt-4o', label: 'GPT-4O'},
-        {value: 'gpt-4o-mini', label: 'GPT-4O Mini'},
+        {value: 'gpt-4o', label: 'GPT-4o'},
+        {value: 'gpt-4o-mini', label: 'GPT-4o Mini'},
         {value: 'gpt-4.1', label: 'GPT-4.1'}
     ];
 
@@ -242,11 +44,11 @@ function App() {
     const handleLogin = (userData) => {
         // Store auth data first
         localStorage.setItem('authToken', userData.token);
-        localStorage.setItem('userId', userData.user_id);
+        localStorage.setItem('userId', userData.user_id.toString());
         localStorage.setItem('username', userData.username);
 
         // Update state
-        setUserId(userData.user_id);
+        setUserId(userData.user_id.toString());
         setUsername(userData.username);
         setShowSignup(false);
 
@@ -294,14 +96,19 @@ function App() {
                 })
             });
 
-            if (!response.ok) throw new Error('Failed to create new chat');
+            if (!response.ok) {
+                const errorData = await response.text();
+                console.error('Failed to create new chat:', errorData);
+                setError('Failed to create new conversation');
+                return;
+            }
             const newConversation = await response.json();
             setConversations(prev => [...prev, newConversation]);
             setCurrentId(newConversation.id);
             setMessages([]);
-        } catch (e) {
+        } catch (error) {
             setError('Failed to create new conversation');
-            console.error(e);
+            console.error('Error creating new chat:', error);
         }
     };
 
@@ -309,14 +116,21 @@ function App() {
     useEffect(() => {
         if (!authenticated) return;
 
+        console.log('Fetching conversations...');
         fetchWithAuth(`${API_BASE}/conversations/`)
             .then(r => {
-                if (!r.ok) throw new Error('Failed to fetch conversations');
+                console.log('Conversations response:', r.status, r.ok);
+                if (!r.ok) throw new Error(`Failed to fetch conversations: ${r.status}`);
                 return r.json();
             })
-            .then(setConversations)
+            .then(data => {
+                console.log('Conversations loaded:', data);
+                setConversations(data);
+            })
             .catch(e => {
+                console.error('Conversations error:', e);
                 if (e.message.includes('401') || e.message.includes('403')) {
+                    console.log('Authentication failed, logging out...');
                     handleLogout();
                 } else {
                     setError('Could not load conversations.');
@@ -327,15 +141,24 @@ function App() {
 
     // Fetch messages for current conversation
     useEffect(() => {
-        if (!authenticated || !currentId) return;
+        if (!authenticated || !currentId) {
+            console.log('Skipping message fetch:', { authenticated, currentId });
+            return;
+        }
 
+        console.log('Fetching messages for conversation:', currentId);
         fetchWithAuth(`${API_BASE}/conversations/${currentId}/messages/`)
             .then(r => {
-                if (!r.ok) throw new Error('Failed to fetch messages');
+                console.log('Messages response:', r.status, r.ok);
+                if (!r.ok) throw new Error(`Failed to fetch messages: ${r.status}`);
                 return r.json();
             })
-            .then(setMessages)
+            .then(data => {
+                console.log('Messages loaded:', data);
+                setMessages(data);
+            })
             .catch(e => {
+                console.error('Messages error:', e);
                 setError('Could not load messages.');
                 console.error(e);
             });
@@ -416,20 +239,23 @@ function App() {
                 const initializeMicrophone = async () => {
                     try {
                         // Only pre-warm on desktop with basic constraints
-                        const stream = await navigator.mediaDevices.getUserMedia({
+                        const mediaStream = await navigator.mediaDevices.getUserMedia({
                             audio: {
                                 echoCancellation: true,
                                 noiseSuppression: true,
                                 autoGainControl: true
                             }
                         });
-                        mediaStreamRef.current = stream;
+                        mediaStreamRef.current = mediaStream;
                         console.log('Desktop microphone pre-warmed successfully');
                     } catch (error) {
                         console.log('Desktop microphone pre-warm failed (user may not have granted permission yet):', error);
                     }
                 };
-                initializeMicrophone();
+                // Explicitly handle the promise
+                initializeMicrophone().catch(error => {
+                    console.error('Failed to initialize microphone:', error);
+                });
             } else {
                 console.log('Mobile device detected - skipping microphone pre-warming to avoid permission issues');
             }
@@ -476,7 +302,7 @@ function App() {
 
         try {
             const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-            let stream = mediaStreamRef.current;
+            let currentStream = mediaStreamRef.current;
 
             // Mobile-friendly audio constraints
             const audioConstraints = isMobile ? {
@@ -484,8 +310,6 @@ function App() {
                     echoCancellation: true,
                     noiseSuppression: true,
                     autoGainControl: true,
-                    // Remove mobile-problematic constraints
-                    // sampleRate, latency, volume often cause issues on mobile
                 }
             } : {
                 audio: {
@@ -500,10 +324,10 @@ function App() {
             };
 
             // Always request fresh stream on mobile, use cached on desktop
-            if (!stream || !stream.active || isMobile) {
+            if (!currentStream || !currentStream.active || isMobile) {
                 console.log(`Requesting microphone access (${isMobile ? 'mobile' : 'desktop'} mode)`);
-                stream = await navigator.mediaDevices.getUserMedia(audioConstraints);
-                mediaStreamRef.current = stream;
+                currentStream = await navigator.mediaDevices.getUserMedia(audioConstraints);
+                mediaStreamRef.current = currentStream;
             }
 
             // Mobile-compatible MediaRecorder setup
@@ -532,7 +356,7 @@ function App() {
             }
 
             if (!mimeType) {
-                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder = new MediaRecorder(currentStream);
                 mimeType = mediaRecorder.mimeType;
                 console.log(`Using browser default format: ${mimeType}`);
             } else {
@@ -540,7 +364,7 @@ function App() {
                     { mimeType } : // Mobile: basic options only
                     { mimeType, audioBitsPerSecond: 128000 }; // Desktop: can handle bitrate setting
 
-                mediaRecorder = new MediaRecorder(stream, recorderOptions);
+                mediaRecorder = new MediaRecorder(currentStream, recorderOptions);
             }
             
             const audioChunks = [];
@@ -705,132 +529,135 @@ function App() {
         <div className="container-fluid p-0 vh-100 d-flex flex-column">
             {error && <ErrorToast message={error} onClose={() => setError(null)}/>}
 
-            {/* Fixed Header for Mobile */}
+            {/* Fixed Header */}
             <div className="header fixed-top">
-                <button
-                    className="menu-button d-flex align-items-center gap-2"
-                    onClick={() => setShowSidebar(!showSidebar)}
-                    aria-label="Open conversations"
-                >
-                    <i className="bi bi-chat-dots"></i>
-                    <span className="d-none d-md-inline">Conversations</span>
-                </button>
-
-                <h5 className="mb-0 d-none d-md-block text-center flex-grow-1">AI Assistant</h5>
-
-                {/* Desktop Controls */}
-                <div className="header-controls flex-grow-1 d-none d-md-flex justify-content-center">
-                    <div className="d-flex align-items-center gap-3">
-                        <div className="d-flex align-items-center gap-2">
-                            <label className="fw-semibold text-nowrap model-mode-label" htmlFor="modelSelect">
-                                Model
-                            </label>
-                            <select
-                                id="modelSelect"
-                                className="model-selector"
-                                value={selectedModel}
-                                onChange={(e) => setSelectedModel(e.target.value)}
-                            >
-                                {models.map(model => (
-                                    <option key={model.value} value={model.value}>{model.label}</option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div className="d-flex align-items-center gap-2">
-                            <label className="fw-semibold text-nowrap model-mode-label" htmlFor="modeSelect">
-                                Mode
-                            </label>
-                            <select
-                                id="modeSelect"
-                                className="mode-selector"
-                                value={chatMode}
-                                onChange={(e) => setChatMode(e.target.value)}
-                            >
-                                {chatModes.map(mode => (
-                                    <option key={mode.value} value={mode.value}>{mode.label}</option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
+                {/* Left Section */}
+                <div className="header-left">
+                    <button
+                        className="menu-button d-flex align-items-center gap-2"
+                        onClick={() => setShowSidebar(!showSidebar)}
+                        aria-label="Open conversations"
+                    >
+                        <i className="bi bi-chat-dots"></i>
+                        <span className="d-none d-md-inline">Conversations</span>
+                    </button>
                 </div>
 
-                {/* Mobile Controls Dropdown */}
-                <div className="mobile-header-controls d-md-none">
-                    <div className="mobile-dropdown">
-                        <button
-                            className="btn btn-outline-light settings-button"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setShowMobileMenu(!showMobileMenu);
-                            }}
-                            aria-label="Settings"
+                {/* Center Section (Desktop Only) */}
+                <div className="header-center d-none d-md-flex align-items-center gap-3">
+                    <h5 className="mb-0 text-white">AI Assistant</h5>
+                    <div className="d-flex align-items-center gap-2">
+                        <label className="fw-semibold text-nowrap model-mode-label" htmlFor="modelSelect">
+                            Model
+                        </label>
+                        <select
+                            id="modelSelect"
+                            className="model-selector"
+                            value={selectedModel}
+                            onChange={(e) => setSelectedModel(e.target.value)}
                         >
-                            <i className="bi bi-gear"></i>
-                        </button>
-                        <div className={`mobile-dropdown-content ${showMobileMenu ? 'show' : ''}`}>
-                            <div className="form-group">
-                                <label htmlFor="mobileModelSelect" className="mobile-dropdown-label">Model</label>
-                                <select
-                                    id="mobileModelSelect"
-                                    className="model-selector w-100"
-                                    value={selectedModel}
-                                    onChange={(e) => setSelectedModel(e.target.value)}
-                                >
-                                    {models.map(model => (
-                                        <option key={model.value} value={model.value}>{model.label}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="form-group">
-                                <label htmlFor="mobileModeSelect" className="mobile-dropdown-label">Mode</label>
-                                <select
-                                    id="mobileModeSelect"
-                                    className="mode-selector w-100"
-                                    value={chatMode}
-                                    onChange={(e) => setChatMode(e.target.value)}
-                                >
-                                    {chatModes.map(mode => (
-                                        <option key={mode.value} value={mode.value}>{mode.label}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="d-flex gap-2">
-                                <button
-                                    className="btn btn-outline-light flex-grow-1"
-                                    onClick={() => {
-                                        setShowMobileMenu(false);
-                                        setShowSidebar(false);
-                                    }}
-                                    aria-label="Close menu"
-                                >
-                                    <i className="bi bi-x"></i>
-                                    <span className="ms-1">Close</span>
-                                </button>
-                                <button
-                                    className="btn btn-outline-danger flex-grow-1"
-                                    onClick={() => {
-                                        setShowMobileMenu(false);
-                                        handleLogout();
-                                    }}
-                                    aria-label="Logout"
-                                >
-                                    <i className="bi bi-box-arrow-right"></i>
-                                    <span className="ms-1">Logout</span>
-                                </button>
-                            </div>
-                        </div>
+                            {models.map(model => (
+                                <option key={model.value} value={model.value}>{model.label}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="d-flex align-items-center gap-2">
+                        <label className="fw-semibold text-nowrap model-mode-label" htmlFor="modeSelect">
+                            Mode
+                        </label>
+                        <select
+                            id="modeSelect"
+                            className="mode-selector"
+                            value={chatMode}
+                            onChange={(e) => setChatMode(e.target.value)}
+                        >
+                            {chatModes.map(mode => (
+                                <option key={mode.value} value={mode.value}>{mode.label}</option>
+                            ))}
+                        </select>
                     </div>
                 </div>
 
-                <button
-                    className="btn btn-outline-light d-none d-md-flex align-items-center gap-2"
-                    onClick={handleLogout}
-                    aria-label="Logout"
-                >
-                    <i className="bi bi-box-arrow-right"></i>
-                    <span className="d-none d-lg-inline">Logout</span>
-                </button>
+                {/* Right Section */}
+                <div className="header-right d-flex align-items-center gap-2">
+                    {/* Mobile Controls Dropdown */}
+                    <div className="mobile-header-controls d-md-none">
+                        <div className="mobile-dropdown">
+                            <button
+                                className="btn settings-button"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowMobileMenu(!showMobileMenu);
+                                }}
+                                aria-label="Settings"
+                            >
+                                <i className="bi bi-gear"></i>
+                            </button>
+                            <div className={`mobile-dropdown-content ${showMobileMenu ? 'show' : ''}`}>
+                                <div className="form-group">
+                                    <label htmlFor="mobileModelSelect" className="mobile-dropdown-label">Model</label>
+                                    <select
+                                        id="mobileModelSelect"
+                                        className="model-selector w-100"
+                                        value={selectedModel}
+                                        onChange={(e) => setSelectedModel(e.target.value)}
+                                    >
+                                        {models.map(model => (
+                                            <option key={model.value} value={model.value}>{model.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="form-group">
+                                    <label htmlFor="mobileModeSelect" className="mobile-dropdown-label">Mode</label>
+                                    <select
+                                        id="mobileModeSelect"
+                                        className="mode-selector w-100"
+                                        value={chatMode}
+                                        onChange={(e) => setChatMode(e.target.value)}
+                                    >
+                                        {chatModes.map(mode => (
+                                            <option key={mode.value} value={mode.value}>{mode.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="d-flex gap-2">
+                                    <button
+                                        className="btn btn-outline-light flex-grow-1"
+                                        onClick={() => {
+                                            setShowMobileMenu(false);
+                                            setShowSidebar(false);
+                                        }}
+                                        aria-label="Close menu"
+                                    >
+                                        <i className="bi bi-x"></i>
+                                        <span className="ms-1">Close</span>
+                                    </button>
+                                    <button
+                                        className="btn btn-outline-danger flex-grow-1"
+                                        onClick={() => {
+                                            setShowMobileMenu(false);
+                                            handleLogout();
+                                        }}
+                                        aria-label="Logout"
+                                    >
+                                        <i className="bi bi-box-arrow-right"></i>
+                                        <span className="ms-1">Logout</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Desktop Logout */}
+                    <button
+                        className="btn btn-outline-light d-none d-md-flex align-items-center gap-2"
+                        onClick={handleLogout}
+                        aria-label="Logout"
+                    >
+                        <i className="bi bi-box-arrow-right"></i>
+                        <span className="d-none d-lg-inline">Logout</span>
+                    </button>
+                </div>
             </div>
 
             {/* Main content with top padding for fixed header */}
@@ -847,14 +674,13 @@ function App() {
                     style={{
                         width: '280px',
                         position: 'fixed',
-                        top: 0,
+                        top: '70px', // Start directly below the header
                         bottom: 0,
                         left: 0,
                         zIndex: 1045,
                         transform: showSidebar ? 'translateX(0)' : 'translateX(-100%)',
                         transition: 'transform 0.3s ease-in-out',
-                        overflowY: 'auto',
-                        paddingTop: '70px'
+                        overflowY: 'auto'
                     }}
                 >
                     <ChatSidebar
@@ -873,7 +699,7 @@ function App() {
 
                 {/* Chat area with improved layout */}
                 <div className="flex-grow-1 d-flex flex-column">
-                    <ChatWindow messages={messages} userId={userId} username={username}/>
+                    <ChatWindow messages={messages} username={username}/>
                     <ChatInput
                         onSend={handleSend}
                         onSTT={handleSTT}
