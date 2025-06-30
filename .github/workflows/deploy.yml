@@ -2,29 +2,27 @@ name: Deploy to EC2
 
 on:
   push:
-    branches: [ main, develop ]
-  pull_request:
     branches: [ main ]
   workflow_dispatch:
     inputs:
-      branch:
-        description: 'Branch to deploy'
+      confirm_deploy:
+        description: 'Type "deploy" to confirm deployment'
         required: true
-        default: 'main'
-        type: choice
-        options:
-          - main
-          - develop
-          - staging
+        default: ''
+        type: string
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Only run if manual trigger confirms deployment or it's a push to main
+    if: github.event_name == 'push' || github.event.inputs.confirm_deploy == 'deploy'
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        ref: main  # Always deploy from main branch
 
     - name: Set up Node.js
       uses: actions/setup-node@v4
@@ -70,6 +68,10 @@ jobs:
 
     - name: Run backend tests
       working-directory: ./backend/LifeLine
+      env:
+        DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        DEBUG: False
       run: |
         echo "Running Django tests..."
         python manage.py test --verbosity=2 || echo "Tests failed but continuing deployment"
@@ -133,11 +135,29 @@ jobs:
         cd $APP_DIR/current/backend/LifeLine
         source $VENV_DIR/bin/activate
         
+        # Ensure environment variables are available for Django
+        export DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY}"
+        export OPENAI_API_KEY="${OPENAI_API_KEY}"
+        export DEBUG=False
+        export ALLOWED_HOSTS="*"
+        
+        # Verify environment variables are set
+        echo "Verifying environment variables..."
+        if [ -z "$DJANGO_SECRET_KEY" ]; then
+            echo "❌ DJANGO_SECRET_KEY is not set"
+            exit 1
+        fi
+        if [ -z "$OPENAI_API_KEY" ]; then
+            echo "❌ OPENAI_API_KEY is not set"
+            exit 1
+        fi
+        echo "✅ Environment variables verified"
+        
         # Apply migrations
-        python manage.py migrate --noinput
+        DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY}" OPENAI_API_KEY="${OPENAI_API_KEY}" python manage.py migrate --noinput
         
         # Collect static files
-        python manage.py collectstatic --noinput --clear
+        DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY}" OPENAI_API_KEY="${OPENAI_API_KEY}" python manage.py collectstatic --noinput --clear
         
         # Set up frontend
         echo "🌐 Setting up frontend..."
@@ -148,7 +168,7 @@ jobs:
         
         # Create systemd service
         echo "🔧 Creating backend service..."
-        sudo tee /etc/systemd/system/lifeline-backend.service > /dev/null << 'SYSTEMD_EOF'
+        sudo tee /etc/systemd/system/lifeline-backend.service > /dev/null << SYSTEMD_EOF
         [Unit]
         Description=LifeLine Django Backend
         After=network.target
@@ -256,6 +276,19 @@ jobs:
         
         chmod +x deployment/deploy.sh
 
+    - name: Show GitHub Runner IP
+      run: |
+        echo "🌐 Deploying from branch: ${{ github.ref_name }}"
+        echo "🌐 GitHub Actions Runner IP Information:"
+        echo "Runner IP: $(curl -s ifconfig.me || curl -s icanhazip.com || echo 'Unknown')"
+        echo ""
+        echo "⚠️  SECURITY GROUP CONFIGURATION NEEDED:"
+        echo "Your EC2 security group needs to allow SSH (port 22) from this IP"
+        echo "Current rule allows: 136.26.51.147/32 (your local machine)"
+        echo "Required: Add rule for GitHub Actions runner IPs"
+        echo ""
+        echo "Quick fix: Change SSH source to 0.0.0.0/0"
+
     - name: Setup SSH
       env:
         EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
@@ -270,13 +303,16 @@ jobs:
         echo "$EC2_SSH_PRIVATE_KEY" > ~/.ssh/private_key
         chmod 600 ~/.ssh/private_key
         
-        # Get GitHub Actions IP ranges and add EC2 host to known hosts
-        echo "🌐 Configuring SSH known hosts..."
-        ssh-keyscan -H ${{ secrets.EC2_HOSTNAME }} >> ~/.ssh/known_hosts 2>/dev/null || true
+        # Validate private key format
+        if ssh-keygen -l -f ~/.ssh/private_key > /dev/null 2>&1; then
+          echo "✅ SSH private key is valid"
+        else
+          echo "❌ SSH private key format is invalid"
+          exit 1
+        fi
         
-        # Display current runner IP for debugging
-        echo "📍 Current runner IP:"
-        curl -s ifconfig.me || curl -s icanhazip.com || echo "Could not determine IP"
+        # Configure SSH known hosts
+        ssh-keyscan -H ${{ secrets.EC2_HOSTNAME }} >> ~/.ssh/known_hosts 2>/dev/null || true
 
     - name: Test SSH Connection
       env:
@@ -285,39 +321,27 @@ jobs:
       run: |
         echo "🔍 Testing SSH connection..."
         
-        # Test connection with various timeout and retry settings
-        for i in {1..5}; do
-          echo "Attempt $i/5..."
-          if timeout 60 ssh -v -o ConnectTimeout=30 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 -o BatchMode=yes -i ~/.ssh/private_key ${EC2_USER_NAME}@${EC2_HOSTNAME} 'echo "SSH connection successful - $(date)"'; then
-            echo "✅ SSH connection established successfully"
-            break
-          else
-            echo "❌ SSH connection attempt $i failed"
-            if [ $i -eq 5 ]; then
-              echo ""
-              echo "🚨 SSH Connection Troubleshooting:"
-              echo "1. Verify EC2 instance is running: aws ec2 describe-instances"
-              echo "2. Check Security Group allows SSH from 0.0.0.0/0 (or GitHub Actions IP ranges)"
-              echo "3. Verify SSH key matches the EC2 instance key pair"
-              echo "4. Check if EC2 instance has a public IP assigned"
-              echo ""
-              echo "Current runner details:"
-              echo "IP: $(curl -s ifconfig.me 2>/dev/null || echo 'Unknown')"
-              echo "Hostname: ${EC2_HOSTNAME}"
-              echo "User: ${EC2_USER_NAME}"
-              echo ""
-              echo "To fix Security Group, add this rule:"
-              echo "Type: SSH (22), Protocol: TCP, Port: 22, Source: 0.0.0.0/0"
-              echo ""
-              exit 1
-            fi
-            sleep 15
-          fi
-        done
+        # Test with shorter timeout for faster feedback
+        if timeout 30 ssh -o ConnectTimeout=10 -o BatchMode=yes -i ~/.ssh/private_key ${EC2_USER_NAME}@${EC2_HOSTNAME} 'echo "✅ SSH connection successful!"'; then
+            echo "🎉 Ready to deploy!"
+        else
+            echo ""
+            echo "❌ SSH Connection Failed!"
+            echo ""
+            echo "SOLUTION: Update your EC2 Security Group"
+            echo "1. Go to AWS Console → EC2 → Security Groups"
+            echo "2. Select security group: sg-061598a25c91a141e"
+            echo "3. Edit inbound rules"
+            echo "4. Change SSH rule source from '136.26.51.147/32' to '0.0.0.0/0'"
+            echo ""
+            echo "Current runner IP: $(curl -s ifconfig.me 2>/dev/null || echo 'Unknown')"
+            echo "Your rule allows: 136.26.51.147/32"
+            echo ""
+            exit 1
+        fi
 
     - name: Deploy to EC2
       env:
-        EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
         EC2_HOSTNAME: ${{ secrets.EC2_HOSTNAME }}
         EC2_USER_NAME: ${{ secrets.EC2_USER_NAME }}
         DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
@@ -327,15 +351,15 @@ jobs:
         
         # Copy deployment package
         echo "📦 Copying deployment package..."
-        scp -o ConnectTimeout=30 -o ServerAliveInterval=10 -i ~/.ssh/private_key -r deployment ${EC2_USER_NAME}@${EC2_HOSTNAME}:/tmp/lifeline-deployment
+        scp -o ConnectTimeout=30 -i ~/.ssh/private_key -r deployment ${EC2_USER_NAME}@${EC2_HOSTNAME}:/tmp/lifeline-deployment
         
         # Execute deployment script
         echo "🔧 Executing deployment script..."
-        ssh -o ConnectTimeout=30 -o ServerAliveInterval=10 -i ~/.ssh/private_key ${EC2_USER_NAME}@${EC2_HOSTNAME} "
+        ssh -o ConnectTimeout=30 -i ~/.ssh/private_key ${EC2_USER_NAME}@${EC2_HOSTNAME} "
           export DJANGO_SECRET_KEY='${DJANGO_SECRET_KEY}'
           export OPENAI_API_KEY='${OPENAI_API_KEY}'
           chmod +x /tmp/lifeline-deployment/deploy.sh
-          sudo /tmp/lifeline-deployment/deploy.sh
+          sudo -E DJANGO_SECRET_KEY='${DJANGO_SECRET_KEY}' OPENAI_API_KEY='${OPENAI_API_KEY}' /tmp/lifeline-deployment/deploy.sh
         "
 
     - name: Verify deployment
@@ -344,33 +368,30 @@ jobs:
       run: |
         echo "🔍 Verifying deployment..."
         
-        # Wait for services to fully start
+        # Wait for services to start
         sleep 30
         
         # Test frontend
         if curl -f -s --max-time 10 http://${EC2_HOSTNAME} > /dev/null; then
             echo "✅ Frontend is responding"
         else
-            echo "⚠️ Frontend check failed - may still be starting"
+            echo "⚠️ Frontend may still be starting"
         fi
         
         # Test backend API
         if curl -f -s --max-time 10 http://${EC2_HOSTNAME}/api/ > /dev/null; then
             echo "✅ Backend API is responding"
         else
-            echo "⚠️ Backend API check failed - may still be starting"
+            echo "⚠️ Backend API may still be starting"
         fi
-        
-        echo "✅ Deployment verification completed!"
 
     - name: Deployment summary
       if: always()
       run: |
         if [ ${{ job.status }} == 'success' ]; then
           echo "🎉 Deployment successful!"
-          echo "🌐 Application URL: http://${{ secrets.EC2_HOSTNAME }}"
-          echo "🔧 Admin Panel: http://${{ secrets.EC2_HOSTNAME }}/admin/"
+          echo "🌐 Application: http://${{ secrets.EC2_HOSTNAME }}"
+          echo "🔧 Admin: http://${{ secrets.EC2_HOSTNAME }}/admin/"
         else
-          echo "❌ Deployment failed!"
-          echo "Please check the logs above for details."
+          echo "❌ Deployment failed - check logs above"
         fi
