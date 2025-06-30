@@ -16,19 +16,7 @@ on:
           - main
           - develop
           - staging
-      environment:
-        description: 'Deployment environment'
-        required: false
-        default: 'production'
-        type: choice
-        options:
-          - production
-          - staging
-      skip_tests:
-        description: 'Skip running tests'
-        required: false
-        default: false
-        type: boolean
+          - feature/branch-name
 
 jobs:
   deploy:
@@ -72,10 +60,21 @@ jobs:
       working-directory: ./frontend
       run: |
         echo "Installing frontend dependencies..."
-        # Generate package-lock.json if it doesn't exist
+        # Check if package-lock.json exists and is in sync
         if [ ! -f package-lock.json ]; then
+          echo "No package-lock.json found, generating..."
           npm install --package-lock-only
+        else
+          echo "Checking if package-lock.json is in sync with package.json..."
+          # Try npm ci first, if it fails, regenerate lock file
+          if ! npm ci --dry-run 2>/dev/null; then
+            echo "package-lock.json is out of sync, regenerating..."
+            rm -f package-lock.json
+            npm install --package-lock-only
+          fi
         fi
+        
+        # Install dependencies
         npm ci
         echo "Frontend dependencies installed"
 
