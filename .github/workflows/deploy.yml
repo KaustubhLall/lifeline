@@ -78,21 +78,8 @@ jobs:
         # Set Django settings module explicitly
         export DJANGO_SETTINGS_MODULE=LifeLine.settings
         
-        # Skip model validation during testing and run system checks instead
-        echo "Running Django system checks..."
-        python manage.py check --verbosity=2 || echo "System checks failed but continuing deployment"
-        
-        # Run a simple test to verify Django is working
-        echo "Verifying Django configuration..."
-        python -c "
-        import os
-        os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'LifeLine.settings')
-        import django
-        django.setup()
-        from django.contrib.auth import get_user_model
-        User = get_user_model()
-        print('✅ Django configuration verified - User model:', User)
-        " || echo "Django verification failed but continuing deployment"
+        # Run tests with specific app pattern to avoid import path conflicts
+        python manage.py test api.tests --verbosity=2 --keepdb || echo "Tests failed but continuing deployment"
 
     - name: Prepare deployment package
       run: |
@@ -306,6 +293,35 @@ jobs:
         echo "✅ Backend service status: $(sudo systemctl is-active lifeline-backend)"
         echo "✅ Nginx service status: $(sudo systemctl is-active nginx)"
         
+        # Additional diagnostics
+        echo "🔍 Running diagnostics..."
+        
+        # Check if ports are actually listening
+        echo "📡 Checking listening ports..."
+        sudo netstat -tlnp | grep -E ':(80|8000|443)' || echo "Port check failed"
+        
+        # Check nginx processes
+        echo "🌐 Nginx processes:"
+        ps aux | grep nginx | grep -v grep || echo "No nginx processes found"
+        
+        # Check Django processes
+        echo "🐍 Django processes:"
+        ps aux | grep manage.py | grep -v grep || echo "No Django processes found"
+        
+        # Test local connections
+        echo "🔌 Testing local connections..."
+        curl -I http://localhost:80 2>/dev/null | head -1 || echo "❌ Nginx not responding on port 80"
+        curl -I http://localhost:8000 2>/dev/null | head -1 || echo "❌ Django not responding on port 8000"
+        
+        # Check system firewall
+        echo "🔥 Checking system firewall..."
+        sudo iptables -L INPUT -n | head -10 || echo "iptables check failed"
+        
+        # Check for any blocking services
+        echo "📋 Service status summary:"
+        sudo systemctl status lifeline-backend --no-pager -l || echo "Backend status failed"
+        sudo systemctl status nginx --no-pager -l || echo "Nginx status failed"
+        
         echo "🎉 Deployment completed!"
         EOF
         
@@ -322,16 +338,7 @@ jobs:
         echo "Current rule allows: 136.26.51.147/32 (your local machine)"
         echo "Required: Add rule for GitHub Actions runner IPs"
         echo ""
-        echo "🔥 CRITICAL: HTTP ACCESS MISSING!"
-        echo "Your security group MUST allow HTTP (port 80) from anywhere (0.0.0.0/0)"
-        echo "Without this rule, your website won't be accessible from browsers!"
-        echo ""
-        echo "REQUIRED SECURITY GROUP RULES:"
-        echo "1. SSH (port 22): 0.0.0.0/0 (or specific IPs)"
-        echo "2. HTTP (port 80): 0.0.0.0/0 (REQUIRED for website access)"
-        echo "3. HTTPS (port 443): 0.0.0.0/0 (optional for SSL)"
-        echo ""
-        echo "Quick fix: Change SSH source to 0.0.0.0/0 AND add HTTP rule"
+        echo "Quick fix: Change SSH source to 0.0.0.0/0"
 
     - name: Setup SSH
       env:
@@ -400,7 +407,7 @@ jobs:
         # Execute deployment script
         echo "🔧 Executing deployment script..."
         ssh -o ConnectTimeout=30 -i ~/.ssh/private_key ${EC2_USER_NAME}@${EC2_HOSTNAME} "
-          export DJANGO_SECRET_KEY='${DJANGO_SECRET_KEY}'a
+          export DJANGO_SECRET_KEY='${DJANGO_SECRET_KEY}'
           export OPENAI_API_KEY='${OPENAI_API_KEY}'
           chmod +x /tmp/lifeline-deployment/deploy.sh
           sudo -E DJANGO_SECRET_KEY='${DJANGO_SECRET_KEY}' OPENAI_API_KEY='${OPENAI_API_KEY}' /tmp/lifeline-deployment/deploy.sh
