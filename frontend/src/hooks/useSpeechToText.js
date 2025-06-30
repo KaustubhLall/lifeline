@@ -1,7 +1,7 @@
 // Hook for managing speech-to-text recording and transcription
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { isSTTSupported } from '../utils/speechUtils';
-import { fetchWithAuth, API_BASE } from '../utils/apiUtils';
+import {useCallback, useEffect, useRef, useState} from 'react';
+import {isSTTSupported} from '../utils/speechUtils';
+import {API_BASE, fetchWithAuth} from '../utils/apiUtils';
 
 export function useSpeechToText(authenticated) {
     const [sttActive, setSttActive] = useState(false);
@@ -46,7 +46,7 @@ export function useSpeechToText(authenticated) {
 
     // Start or stop recording and return transcribed text
     const handleSTT = useCallback(async () => {
-        console.log('handleSTT called in useSpeechToText hook', { sttSupported, sttActive });
+        console.log('handleSTT called in useSpeechToText hook', {sttSupported, sttActive});
 
         if (!sttSupported) {
             console.log('STT not supported, showing error');
@@ -101,7 +101,10 @@ export function useSpeechToText(authenticated) {
                 ? ['audio/webm', 'audio/mp4', 'audio/ogg', 'audio/wav']
                 : ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm', 'audio/ogg;codecs=opus'];
             let mimeType = formats.find(f => MediaRecorder.isTypeSupported(f)) || '';
-            const recorder = new MediaRecorder(stream, mimeType ? { mimeType, audioBitsPerSecond: isMobile ? undefined : 128000 } : undefined);
+            const recorder = new MediaRecorder(stream, mimeType ? {
+                mimeType,
+                audioBitsPerSecond: isMobile ? undefined : 128000
+            } : undefined);
 
             // Collect audio chunks
             const audioChunks = [];
@@ -109,7 +112,9 @@ export function useSpeechToText(authenticated) {
             recognitionRef.current = recorder;
             recorder.start(isMobile ? 100 : 10);
 
-            recorder.ondataavailable = e => { if (e.data.size && isRecordingRef.current) audioChunks.push(e.data); };
+            recorder.ondataavailable = e => {
+                if (e.data.size && isRecordingRef.current) audioChunks.push(e.data);
+            };
 
             return new Promise(resolve => {
                 recorder.onstop = async () => {
@@ -121,7 +126,7 @@ export function useSpeechToText(authenticated) {
                         mediaStreamRef.current = null;
                     }
 
-                    const audioBlob = new Blob(audioChunks, { type: recorder.mimeType });
+                    const audioBlob = new Blob(audioChunks, {type: recorder.mimeType});
 
                     // Validate recording length and size
                     if (audioBlob.size < (isMobile ? 1000 : 1500)) {
@@ -149,7 +154,10 @@ export function useSpeechToText(authenticated) {
                             resolve(null);
                         }
                     };
-                    reader.onerror = () => { setError('Audio processing error.'); resolve(null); };
+                    reader.onerror = () => {
+                        setError('Audio processing error.');
+                        resolve(null);
+                    };
                     reader.readAsDataURL(audioBlob);
                 };
             });
@@ -172,5 +180,5 @@ export function useSpeechToText(authenticated) {
 
     const clearError = useCallback(() => setError(null), []);
 
-    return { sttActive, sttSupported, error, handleSTT, clearError };
+    return {sttActive, sttSupported, error, handleSTT, clearError};
 }

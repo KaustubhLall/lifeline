@@ -1,11 +1,11 @@
-import React, { useRef, useEffect } from 'react';
+import React, {useEffect, useRef} from 'react';
 import '../styles/components/ChatInput.css';
 
 function ChatInput({onSend, onSTT, input, setInput, sttActive, sttSupported}) {
     const textareaRef = useRef(null);
 
     const handleSTTClick = async () => {
-        console.log('STT button clicked!', { sttSupported, sttActive });
+        console.log('STT button clicked!', {sttSupported, sttActive});
         if (onSTT) {
             try {
                 await onSTT();

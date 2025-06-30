@@ -1,6 +1,6 @@
 import React from 'react';
 
-function ErrorToast({ message, onClose }) {
+function ErrorToast({message, onClose}) {
     return (
         <div className="toast show position-fixed top-0 end-0 m-3" role="alert" style={{zIndex: 1050}}>
             <div className="toast-header bg-danger text-white">

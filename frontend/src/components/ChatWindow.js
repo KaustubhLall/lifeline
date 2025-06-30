@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, {useEffect, useRef} from 'react';
 import '../styles/components/ChatWindow.css';
 
 function ChatWindow({messages, username}) {
