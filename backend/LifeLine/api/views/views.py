@@ -2,6 +2,7 @@ import base64
 import io
 import logging
 import asyncio
+import time
 from threading import Thread
 
 from django.contrib.auth import get_user_model
@@ -13,7 +14,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from ..models.chat import Conversation, Message, MessageNote, Memory
+from ..models.chat import Conversation, Message, MessageNote, Memory, PromptDebug
 from ..serializers import MemorySerializer, MemoryCreateSerializer
 from ..utils.llm import call_llm_text, APIBudgetError, ModelNotAvailableError, LLMError
 from ..utils.prompts import build_enhanced_prompt, get_system_prompt, validate_mode
@@ -29,7 +30,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 User = get_user_model()
-
 
 def _log_request_info(request, action, **kwargs):
     """Log request information with client details."""
@@ -226,22 +226,6 @@ class MessageListCreateView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Create user message
-            user_msg = Message.objects.create(
-                conversation=conversation,
-                sender=request.user,
-                content=user_message,
-                role='user',
-                metadata={'model': model, 'mode': mode}
-            )
-
-            logger.info(f"Created user message {user_msg.id} in conversation {conversation_id}")
-
-            # Start background memory extraction
-            memory_thread = Thread(target=async_memory_extraction, args=(user_msg.id, request.user.id))
-            memory_thread.daemon = True
-            memory_thread.start()
-
             logger.info(f"[ENHANCED RAG] Starting enhanced conversation processing for user {request.user.username}")
 
             # Get relevant memories using enhanced RAG
@@ -273,7 +257,7 @@ class MessageListCreateView(APIView):
             for msg in all_messages:
                 message_dict = {
                     'role': msg.role,
-                    'content': msg.content,
+                    'content': msg.raw_user_input if msg.raw_user_input else msg.content,  # Use original user input for history
                     'created_at': msg.created_at.isoformat() if msg.created_at else None,
                     'is_bot': msg.is_bot
                 }
@@ -306,16 +290,74 @@ class MessageListCreateView(APIView):
             logger.info(f"[PROMPT BUILDING] Enhanced prompt built - Total length: {len(enhanced_prompt)} characters")
             logger.debug(f"[PROMPT BUILDING] Final prompt preview: {enhanced_prompt[:500]}...")
 
+            # Create user message with full prompt stored for debugging
+            user_msg = Message.objects.create(
+                conversation=conversation,
+                sender=request.user,
+                content=user_message,  # Store original user message in content
+                raw_user_input=user_message,  # Store original input
+                full_prompt=enhanced_prompt,  # Store complete prompt for debugging
+                role='user',
+                metadata={
+                    'model': model,
+                    'mode': mode,
+                    'memories_included': len(all_memories),
+                    'relevant_memories': len(relevant_memories),
+                    'conversation_memories': len(conversation_memories),
+                    'prompt_length': len(enhanced_prompt),
+                    'history_messages_included': len(message_history)
+                }
+            )
+
+            logger.info(f"Created user message {user_msg.id} with full prompt ({len(enhanced_prompt)} chars) in conversation {conversation_id}")
+
+            # Start background memory extraction
+            memory_thread = Thread(target=async_memory_extraction, args=(user_msg.id, request.user.id))
+            memory_thread.daemon = True
+            memory_thread.start()
+
+            # Prepare debug information
+            system_prompt = get_system_prompt(mode)
+            memory_context = generate_memory_context(all_memories)
+            from ..utils.prompts import format_conversation_history
+            conversation_history_text = format_conversation_history(message_history, 10000)
+
+            # Initialize debug entry
+            debug_entry = PromptDebug.objects.create(
+                user_message=user_msg,
+                conversation=conversation,
+                full_prompt=enhanced_prompt,
+                system_prompt=system_prompt,
+                memory_context=memory_context,
+                conversation_history=conversation_history_text,
+                model_used=model,
+                mode_used=mode,
+                temperature=0.0,
+                prompt_length=len(enhanced_prompt),
+                memories_used_count=len(all_memories),
+                relevant_memories_count=len(relevant_memories),
+                conversation_memories_count=len(conversation_memories),
+                history_messages_count=len(message_history)
+            )
+
             try:
                 logger.info(f"[LLM CALL] Calling LLM with model={model}, prompt_length={len(enhanced_prompt)}")
-                bot_response = call_llm_text(enhanced_prompt, model=model)
-                logger.info(f"[LLM CALL] Received response - Length: {len(bot_response)} characters")
+                start_time = time.time()
 
-                # Create bot message with enhanced metadata
+                bot_response = call_llm_text(enhanced_prompt, model=model)
+
+                end_time = time.time()
+                response_time_ms = int((end_time - start_time) * 1000)
+
+                logger.info(f"[LLM CALL] Received response - Length: {len(bot_response)} characters, Time: {response_time_ms}ms")
+
+                # Create bot message with full AI response stored
                 bot_msg = Message.objects.create(
                     conversation=conversation,
                     sender=request.user,
-                    content=bot_response,
+                    content=bot_response,  # Store full AI response
+                    raw_user_input="",  # No raw input for bot messages
+                    full_prompt="",  # No prompt for bot messages (they are responses)
                     is_bot=True,
                     role='assistant',
                     metadata={
@@ -326,11 +368,18 @@ class MessageListCreateView(APIView):
                         'conversation_memories': len(conversation_memories),
                         'prompt_length': len(enhanced_prompt),
                         'response_length': len(bot_response),
-                        'history_messages_included': len(message_history)
+                        'response_time_ms': response_time_ms,
+                        'history_messages_included': len(message_history),
+                        'debug_entry_id': debug_entry.id
                     }
                 )
 
-                logger.info(f"[MESSAGE CREATION] Created bot message {bot_msg.id} with enhanced metadata")
+                # Update debug entry with response info
+                debug_entry.bot_response = bot_msg
+                debug_entry.response_time_ms = response_time_ms
+                debug_entry.save()
+
+                logger.info(f"[MESSAGE CREATION] Created bot message {bot_msg.id} with full response and debug entry {debug_entry.id}")
 
                 # Update conversation context with enhanced information
                 conversation.context = {
@@ -350,7 +399,8 @@ class MessageListCreateView(APIView):
                         'prompt_length': len(enhanced_prompt),
                         'history_messages': len(message_history),
                         'mode_used': mode
-                    }
+                    },
+                    'last_debug_entry_id': debug_entry.id
                 }
                 conversation.save()
 
@@ -367,18 +417,24 @@ class MessageListCreateView(APIView):
                 }, status=status.HTTP_201_CREATED)
 
             except APIBudgetError as e:
+                debug_entry.api_error = f"APIBudgetError: {str(e)}"
+                debug_entry.save()
                 logger.error(f"API budget exceeded for conversation {conversation_id}: {str(e)}")
                 return Response(
                     {'detail': str(e)},
                     status=status.HTTP_402_PAYMENT_REQUIRED
                 )
             except ModelNotAvailableError as e:
+                debug_entry.api_error = f"ModelNotAvailableError: {str(e)}"
+                debug_entry.save()
                 logger.error(f"Model {model} not available for conversation {conversation_id}: {str(e)}")
                 return Response(
                     {'detail': str(e)},
                     status=status.HTTP_400_BAD_REQUEST
                 )
             except LLMError as e:
+                debug_entry.api_error = f"LLMError: {str(e)}"
+                debug_entry.save()
                 logger.error(f"LLM error for conversation {conversation_id}: {str(e)}")
                 return Response(
                     {'detail': str(e)},
