@@ -167,6 +167,7 @@ jobs:
         
         [Install]
         WantedBy=multi-user.target
+        SYSTEMD_EOF
         
         # Configure Nginx
         echo "🔧 Configuring Nginx..."
