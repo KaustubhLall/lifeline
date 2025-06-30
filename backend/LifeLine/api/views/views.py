@@ -1,20 +1,26 @@
 import base64
 import io
 import logging
+import asyncio
+from threading import Thread
 
 from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.core.paginator import Paginator
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ..models.chat import Conversation, Message, MessageNote, Memory
-from ..utils.llm import (call_llm_text, call_llm_with_rag_context, extract_memories_from_messages,
-                        APIBudgetError, ModelNotAvailableError, LLMError)
-from ..utils.prompts import get_system_prompt
-from ..utils.memory_utils import get_memory_manager
+from ..serializers import MemorySerializer, MemoryCreateSerializer
+from ..utils.llm import call_llm_text, APIBudgetError, ModelNotAvailableError, LLMError
+from ..utils.prompts import build_enhanced_prompt, get_system_prompt, validate_mode
+from ..utils.memory_utils import (
+    extract_and_store_memory, get_relevant_memories, generate_memory_context,
+    get_conversation_memories, rerank_memories_by_context
+)
 
 # Configure logging with filename and line numbers
 logging.basicConfig(
@@ -32,6 +38,19 @@ def _log_request_info(request, action, **kwargs):
     user_info = f"User: {request.user.username} (ID: {request.user.id})" if hasattr(request,
                                                                                     'user') and request.user.is_authenticated else "Anonymous"
     logger.info(f"{action} - {user_info} from {client_ip} - {kwargs}")
+
+
+def async_memory_extraction(message_id, user_id):
+    """Background task to extract memory from a message."""
+    try:
+        message = Message.objects.get(id=message_id)
+        user = User.objects.get(id=user_id)
+
+        # Call the synchronous function directly
+        extract_and_store_memory(message, user)
+
+    except Exception as e:
+        logger.error(f"Background memory extraction failed for message {message_id}: {str(e)}")
 
 
 class ConversationListCreateView(APIView):
@@ -54,8 +73,7 @@ class ConversationListCreateView(APIView):
                 'created_at': c.created_at,
                 'updated_at': c.updated_at,
                 'message_count': c.messages.count(),
-                'last_message': c.messages.last().content if c.messages.exists() else None,
-                'memory_count': c.extracted_memories.filter(is_active=True).count()  # Show memory count
+                'last_message': c.messages.last().content if c.messages.exists() else None
             } for c in conversations]
 
             logger.info(f"Retrieved {len(data)} conversations for user {request.user.username}")
@@ -73,9 +91,8 @@ class ConversationListCreateView(APIView):
 
         try:
             title = request.data.get('title', '')
-            model = request.data.get('model', 'gpt-4o-mini')
+            model = request.data.get('model', 'gpt-4.1-nano')
             mode = request.data.get('mode', 'conversational')
-            enable_rag = request.data.get('enable_rag', True)  # RAG enabled by default
 
             # Create new conversation
             conversation = Conversation.objects.create(
@@ -84,13 +101,12 @@ class ConversationListCreateView(APIView):
                 context={
                     'created_at': str(timezone.now()),
                     'model': model,
-                    'mode': mode,
-                    'enable_rag': enable_rag
+                    'mode': mode
                 }
             )
 
             logger.info(
-                f"Created new conversation {conversation.id} for user {request.user.username} - Model: {model}, Mode: {mode}, RAG: {enable_rag}")
+                f"Created new conversation {conversation.id} for user {request.user.username} - Model: {model}, Mode: {mode}")
 
             # Get the conversation data in the same format as GET response
             data = {
@@ -99,8 +115,7 @@ class ConversationListCreateView(APIView):
                 'created_at': conversation.created_at,
                 'updated_at': conversation.updated_at,
                 'message_count': 0,
-                'last_message': None,
-                'memory_count': 0
+                'last_message': None
             }
 
             return Response(data, status=status.HTTP_201_CREATED)
@@ -198,12 +213,11 @@ class MessageListCreateView(APIView):
         try:
             conversation = get_object_or_404(Conversation, id=conversation_id, user=request.user)
             user_message = request.data.get('content')
-            model = request.data.get('model', 'gpt-4o-mini')
+            model = request.data.get('model', 'gpt-4.1-nano')
             mode = request.data.get('mode', 'conversational')
-            enable_rag = conversation.context.get('enable_rag', True)
 
             logger.info(
-                f"Processing message for conversation {conversation_id} - User: {request.user.username}, Model: {model}, Mode: {mode}, RAG: {enable_rag}, Length: {len(user_message) if user_message else 0}")
+                f"Processing message for conversation {conversation_id} - User: {request.user.username}, Model: {model}, Mode: {mode}, Length: {len(user_message) if user_message else 0}")
 
             if not user_message:
                 logger.warning("Attempted to send empty message")
@@ -218,69 +232,86 @@ class MessageListCreateView(APIView):
                 sender=request.user,
                 content=user_message,
                 role='user',
-                metadata={'model': model, 'mode': mode, 'enable_rag': enable_rag}
+                metadata={'model': model, 'mode': mode}
             )
 
             logger.info(f"Created user message {user_msg.id} in conversation {conversation_id}")
 
+            # Start background memory extraction
+            memory_thread = Thread(target=async_memory_extraction, args=(user_msg.id, request.user.id))
+            memory_thread.daemon = True
+            memory_thread.start()
+
+            logger.info(f"[ENHANCED RAG] Starting enhanced conversation processing for user {request.user.username}")
+
+            # Get relevant memories using enhanced RAG
+            logger.info(f"[ENHANCED RAG] Retrieving relevant memories for query: '{user_message[:100]}...'")
+            relevant_memories = get_relevant_memories(
+                user=request.user,
+                query=user_message,
+                limit=5,  # Increased from 3 for better context
+                min_similarity=0.6  # Lower threshold for more inclusive results
+            )
+
+            # Get conversation-specific memories
+            conversation_memories = get_conversation_memories(
+                user=request.user,
+                conversation=conversation,
+                limit=3
+            )
+
+            # Combine and deduplicate memories
+            all_memories = list({m.id: m for m in (relevant_memories + conversation_memories)}.values())
+            logger.info(f"[ENHANCED RAG] Combined {len(all_memories)} unique memories (relevant: {len(relevant_memories)}, conversation: {len(conversation_memories)})")
+
+            # Get conversation history with token counting
+            logger.info(f"[CONVERSATION HISTORY] Retrieving conversation history with 10,000 token limit")
+            all_messages = list(conversation.messages.order_by('created_at'))
+
+            # Convert messages to dictionary format for token counting
+            message_history = []
+            for msg in all_messages:
+                message_dict = {
+                    'role': msg.role,
+                    'content': msg.content,
+                    'created_at': msg.created_at.isoformat() if msg.created_at else None,
+                    'is_bot': msg.is_bot
+                }
+                message_history.append(message_dict)
+
+            # Validate chat mode
+            if not validate_mode(mode):
+                logger.warning(f"[PROMPT BUILDING] Invalid chat mode '{mode}', falling back to 'conversational'")
+                mode = 'conversational'
+
+            # Build enhanced prompt with all context
+            logger.info(f"[PROMPT BUILDING] Building enhanced prompt with mode='{mode}', {len(all_memories)} memories, {len(message_history)} history messages")
+
+            enhanced_prompt = build_enhanced_prompt(
+                mode=mode,
+                memories=[{
+                    'content': m.content,
+                    'title': m.title,
+                    'memory_type': m.memory_type,
+                    'importance_score': m.importance_score,
+                    'created_at': m.created_at.isoformat() if m.created_at else None,
+                    'tags': m.tags or []
+                } for m in all_memories],
+                conversation_history=message_history,
+                current_message=user_message,
+                user_name=request.user.first_name or request.user.username,
+                max_history_tokens=10000  # Use 10k token limit as requested
+            )
+
+            logger.info(f"[PROMPT BUILDING] Enhanced prompt built - Total length: {len(enhanced_prompt)} characters")
+            logger.debug(f"[PROMPT BUILDING] Final prompt preview: {enhanced_prompt[:500]}...")
+
             try:
-                if enable_rag:
-                    # Use RAG-enhanced response generation
-                    logger.info(f"Using RAG-enhanced response for conversation {conversation_id}")
+                logger.info(f"[LLM CALL] Calling LLM with model={model}, prompt_length={len(enhanced_prompt)}")
+                bot_response = call_llm_text(enhanced_prompt, model=model)
+                logger.info(f"[LLM CALL] Received response - Length: {len(bot_response)} characters")
 
-                    llm_result = call_llm_with_rag_context(
-                        user_id=request.user.id,
-                        current_message=user_message,
-                        conversation_id=conversation_id,
-                        chat_mode=mode,
-                        model=model
-                    )
-
-                    bot_response = llm_result["response"]
-                    response_metadata = llm_result["metadata"]
-
-                    logger.info(f"RAG response generated - Memories: {response_metadata['memory_count']}, "
-                              f"Messages: {response_metadata['message_count']}, "
-                              f"Context tokens: {response_metadata['total_context_tokens']}")
-
-                    # Extract memories from new conversation if it's a new conversation (few messages)
-                    message_count = conversation.messages.count()
-                    if message_count >= 3 and message_count % 5 == 0:  # Extract memories every 5 messages after the first 3
-                        logger.info(f"Extracting memories from conversation {conversation_id} (message count: {message_count})")
-                        try:
-                            extracted_memories = extract_memories_from_messages(request.user.id, conversation_id)
-                            logger.info(f"Extracted {len(extracted_memories)} new memories from conversation {conversation_id}")
-                        except Exception as memory_error:
-                            logger.warning(f"Failed to extract memories from conversation {conversation_id}: {memory_error}")
-                else:
-                    # Use traditional context-based response
-                    logger.info(f"Using traditional context-based response for conversation {conversation_id}")
-
-                    # Get conversation history
-                    recent_messages = conversation.messages.order_by('-created_at')[:5]
-                    context = "\n".join([
-                        f"{m.role}: {m.content}"
-                        for m in reversed(recent_messages)
-                    ])
-
-                    # Get system prompt for the selected mode
-                    system_prompt = get_system_prompt(mode)
-                    prompt = f"{system_prompt}\n\nPrevious messages:\n{context}\n\nUser: {user_message}"
-
-                    bot_response = call_llm_text(prompt, model=model)
-                    response_metadata = {
-                        'memory_count': 0,
-                        'message_count': len(recent_messages),
-                        'total_context_tokens': 0,
-                        'chat_mode': mode,
-                        'model': model,
-                        'traditional_context': True
-                    }
-
-                logger.info(
-                    f"Received response from LLM for conversation {conversation_id}, response length: {len(bot_response)}")
-
-                # Create bot message
+                # Create bot message with enhanced metadata
                 bot_msg = Message.objects.create(
                     conversation=conversation,
                     sender=request.user,
@@ -290,28 +321,45 @@ class MessageListCreateView(APIView):
                     metadata={
                         'model': model,
                         'mode': mode,
-                        'enable_rag': enable_rag,
-                        'response_metadata': response_metadata
+                        'used_memories': len(all_memories),
+                        'relevant_memories': len(relevant_memories),
+                        'conversation_memories': len(conversation_memories),
+                        'prompt_length': len(enhanced_prompt),
+                        'response_length': len(bot_response),
+                        'history_messages_included': len(message_history)
                     }
                 )
 
-                logger.info(f"Created bot message {bot_msg.id} in conversation {conversation_id}")
+                logger.info(f"[MESSAGE CREATION] Created bot message {bot_msg.id} with enhanced metadata")
 
-                # Update conversation context
-                conversation.context.update({
+                # Update conversation context with enhanced information
+                conversation.context = {
                     'last_user_message': user_message,
                     'last_bot_response': bot_response,
                     'message_count': conversation.messages.count(),
                     'current_mode': mode,
                     'current_model': model,
-                    'last_response_metadata': response_metadata
-                })
+                    'memories_used': len(all_memories),
+                    'last_rag_retrieval': {
+                        'relevant_memories': len(relevant_memories),
+                        'conversation_memories': len(conversation_memories),
+                        'total_memories': len(all_memories),
+                        'retrieval_timestamp': str(timezone.now())
+                    },
+                    'last_prompt_stats': {
+                        'prompt_length': len(enhanced_prompt),
+                        'history_messages': len(message_history),
+                        'mode_used': mode
+                    }
+                }
                 conversation.save()
+
+                logger.info(f"[CONVERSATION UPDATE] Updated conversation {conversation_id} context with enhanced stats")
 
                 return Response({
                     'id': bot_msg.id,
                     'sender': bot_msg.sender_id,
-                    'content': bot_msg.content,
+                    'content': bot_response,
                     'created_at': bot_msg.created_at,
                     'is_bot': True,
                     'role': 'assistant',
@@ -345,6 +393,139 @@ class MessageListCreateView(APIView):
             )
 
 
+class MemoryListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        _log_request_info(request, "Fetching user memories")
+
+        try:
+            # Get pagination parameters
+            page = int(request.query_params.get('page', 1))
+            page_size = int(request.query_params.get('page_size', 20))
+            memory_type = request.query_params.get('type')
+            search_query = request.query_params.get('search')
+
+            # Base queryset
+            queryset = Memory.objects.filter(user=request.user)
+
+            # Filter by type if specified
+            if memory_type:
+                queryset = queryset.filter(memory_type=memory_type)
+
+            # Search functionality
+            if search_query:
+                relevant_memories = get_relevant_memories(request.user, search_query, limit=100)
+                memory_ids = [m.id for m in relevant_memories]
+                queryset = queryset.filter(id__in=memory_ids)
+            else:
+                # Default ordering by recency and importance
+                queryset = queryset.order_by('-updated_at', '-importance_score')
+
+            # Paginate results
+            paginator = Paginator(queryset, page_size)
+            page_obj = paginator.get_page(page)
+
+            # Serialize memories
+            serializer = MemorySerializer(page_obj.object_list, many=True)
+
+            logger.info(f"Retrieved {len(serializer.data)} memories (page {page}/{paginator.num_pages}) for user {request.user.username}")
+
+            return Response({
+                'memories': serializer.data,
+                'pagination': {
+                    'current_page': page,
+                    'total_pages': paginator.num_pages,
+                    'total_count': paginator.count,
+                    'has_next': page_obj.has_next(),
+                    'has_previous': page_obj.has_previous()
+                }
+            })
+
+        except Exception as e:
+            logger.error(f"Error fetching memories for user {request.user.username}: {str(e)}", exc_info=True)
+            return Response(
+                {'detail': 'Failed to fetch memories'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def post(self, request):
+        _log_request_info(request, "Creating new memory", data=request.data)
+
+        try:
+            serializer = MemoryCreateSerializer(data=request.data)
+            if serializer.is_valid():
+                # Generate embedding for the memory
+                from ..utils.llm import call_llm_embedding
+                embedding = call_llm_embedding(serializer.validated_data['content'])
+
+                memory = serializer.save(
+                    user=request.user,
+                    embedding=embedding,
+                    is_auto_extracted=False
+                )
+
+                logger.info(f"Created manual memory {memory.id} for user {request.user.username}")
+
+                response_serializer = MemorySerializer(memory)
+                return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            logger.error(f"Error creating memory for user {request.user.username}: {str(e)}", exc_info=True)
+            return Response(
+                {'detail': 'Failed to create memory'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class MemoryDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, memory_id):
+        _log_request_info(request, f"Fetching memory details", memory_id=memory_id)
+
+        memory = get_object_or_404(Memory, id=memory_id, user=request.user)
+
+        # Update access tracking
+        memory.access_count += 1
+        memory.last_accessed = timezone.now()
+        memory.save(update_fields=['access_count', 'last_accessed'])
+
+        serializer = MemorySerializer(memory)
+        logger.info(f"Retrieved memory {memory_id} details for user {request.user.username}")
+
+        return Response(serializer.data)
+
+    def patch(self, request, memory_id):
+        _log_request_info(request, f"Updating memory", memory_id=memory_id, data=request.data)
+
+        memory = get_object_or_404(Memory, id=memory_id, user=request.user)
+
+        serializer = MemorySerializer(memory, data=request.data, partial=True)
+        if serializer.is_valid():
+            # If content changed, regenerate embedding
+            if 'content' in request.data:
+                from ..utils.memory_utils import update_memory_embedding
+                update_memory_embedding(memory)
+
+            serializer.save()
+            logger.info(f"Updated memory {memory_id} for user {request.user.username}")
+            return Response(serializer.data)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, memory_id):
+        _log_request_info(request, f"Deleting memory", memory_id=memory_id)
+
+        memory = get_object_or_404(Memory, id=memory_id, user=request.user)
+        memory.delete()
+
+        logger.info(f"Deleted memory {memory_id} for user {request.user.username}")
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 class NoteView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -363,17 +544,9 @@ class NoteView(APIView):
             } for note in notes]
             logger.info(f"Retrieved {len(notes)} notes for message {message_id}")
         else:
-            # Get user's general notes
-            notes = UserNote.objects.filter(user=request.user)
-            data = [{
-                'id': note.id,
-                'title': note.title,
-                'content': note.note,
-                'created_at': note.created_at,
-                'updated_at': note.updated_at,
-                'tags': note.tags
-            } for note in notes]
-            logger.info(f"Retrieved {len(notes)} general notes for user {request.user.username}")
+            # Return empty list since we're transitioning away from UserNote
+            data = []
+            logger.info(f"Retrieved 0 general notes for user {request.user.username} (deprecated)")
 
         return Response(data)
 
@@ -394,21 +567,17 @@ class NoteView(APIView):
                 created_by=request.user
             )
             logger.info(f"Created message note {note.id} for message {message_id}")
-        else:
-            # Create general user note
-            note = UserNote.objects.create(
-                user=request.user,
-                note=content,
-                title=request.data.get('title'),
-                tags=request.data.get('tags', [])
-            )
-            logger.info(f"Created user note {note.id} for user {request.user.username}")
 
-        return Response({
-            'id': note.id,
-            'content': note.note,
-            'created_at': note.created_at
-        }, status=201)
+            return Response({
+                'id': note.id,
+                'content': note.note,
+                'created_at': note.created_at
+            }, status=201)
+        else:
+            # Redirect to memory creation instead of general notes
+            return Response({
+                'error': 'General notes are deprecated. Please use /memories/ endpoint instead.'
+            }, status=400)
 
 
 class TranscriptionView(APIView):

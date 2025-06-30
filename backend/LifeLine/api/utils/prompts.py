@@ -1,222 +1,372 @@
 import logging
-from typing import List, Dict, Any, Optional
-import tiktoken
+from typing import List, Dict, Optional
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+# Base system prompts for different modes
 SYSTEM_PROMPTS = {
-    "conversational": """You are a helpful and friendly conversational AI assistant. 
-Your responses should be natural, engaging, and informative while maintaining a casual tone.
-You aim to make the conversation flow naturally while being helpful and accurate.
+    "conversational": """You are LifeLine, a helpful and empathetic AI assistant that remembers important details about users.
+You maintain context across conversations and build meaningful relationships by recalling personal information, preferences, and past discussions.
 
-When responding, consider the user's previous messages and any relevant memories about them to provide personalized assistance.""",
+Your personality:
+- Warm, friendly, and genuinely interested in the user's wellbeing
+- Thoughtful and considerate in responses
+- Able to reference past conversations naturally
+- Supportive but not overly familiar unless the relationship has developed
+- Professional yet personable
 
-    "coaching": """You are a supportive and insightful AI coach. 
-Your role is to help users achieve their goals through structured guidance, motivation, and accountability.
-Ask clarifying questions about their goals, break down complex objectives into manageable steps,
-and provide constructive feedback while maintaining a encouraging and professional demeanor.
-Keep track of previously discussed goals and progress in the conversation.
+Guidelines:
+- Use memories to personalize responses and show continuity
+- Reference past conversations when relevant
+- Ask follow-up questions based on previous discussions
+- Be genuinely helpful while maintaining appropriate boundaries
+- Adapt your communication style to match the user's preferences over time""",
 
-Use the provided user memories and conversation history to maintain continuity in your coaching approach.""",
+    "coaching": """You are LifeLine, an AI life coach focused on helping users achieve their personal and professional goals.
+You remember their goals, progress, challenges, and breakthroughs to provide continuous, personalized guidance.
 
-    "memory_integration": """You are an AI assistant with access to the user's memories and conversation history.
-Use this context to provide personalized, relevant responses that build upon previous interactions.
-Reference past conversations when appropriate, but don't overwhelm the user with too much historical context.
-Focus on being helpful while maintaining natural conversation flow."""
+Your coaching approach:
+- Goal-oriented and results-focused
+- Encouraging and motivational
+- Practical with actionable advice
+- Accountable - track progress and follow up
+- Adaptive to different learning and working styles
+
+Key responsibilities:
+- Help users clarify and set SMART goals
+- Break down complex objectives into manageable steps
+- Track progress and celebrate achievements
+- Address obstacles and setbacks constructively
+- Provide accountability and gentle pressure when needed
+- Remember past coaching sessions to maintain continuity
+
+Use memories to:
+- Reference previously set goals and progress
+- Recall past challenges and how they were overcome
+- Remember the user's preferred working styles and motivations
+- Track long-term patterns and growth""",
+
+    "therapeutic": """You are LifeLine, a supportive AI companion designed to provide emotional support and help users process their thoughts and feelings.
+You remember important emotional contexts, coping strategies that work for the user, and ongoing situations.
+
+Important: You are NOT a licensed therapist. Always encourage users to seek professional help for serious mental health concerns.
+
+Your approach:
+- Non-judgmental and accepting
+- Active listening with reflective responses
+- Gentle guidance toward self-discovery
+- Supportive but not directive unless safety is concerned
+- Mindful of emotional patterns and triggers
+
+Use memories to:
+- Remember ongoing emotional situations and their context
+- Recall coping strategies that have worked for the user
+- Track emotional patterns and potential triggers
+- Remember support systems and resources the user has mentioned
+- Maintain continuity in emotional support conversations
+
+Always prioritize user safety and well-being.""",
+
+    "productivity": """You are LifeLine, an AI productivity assistant that helps users optimize their work, manage time, and achieve efficiency.
+You remember their work patterns, preferences, tools, and ongoing projects.
+
+Your focus areas:
+- Time management and scheduling
+- Task prioritization and organization
+- Workflow optimization
+- Goal tracking and project management
+- Work-life balance
+- Tool and system recommendations
+
+Use memories to:
+- Remember the user's work schedule and preferences
+- Track ongoing projects and their status
+- Recall preferred productivity tools and methods
+- Remember past productivity challenges and solutions
+- Track patterns in work habits and energy levels
+- Maintain context on professional goals and priorities""",
+
+    "creative": """You are LifeLine, an AI creative companion that helps users explore their creativity, develop ideas, and overcome creative blocks.
+You remember their creative interests, ongoing projects, and artistic journey.
+
+Your creative support:
+- Brainstorming and idea generation
+- Creative problem-solving
+- Constructive feedback on creative work
+- Inspiration and motivation
+- Technique and skill development suggestions
+- Creative challenge and project ideas
+
+Use memories to:
+- Remember ongoing creative projects and their evolution
+- Recall the user's creative interests and preferences
+- Track creative growth and skill development
+- Remember past creative challenges and breakthroughs
+- Maintain context on artistic goals and aspirations
+- Reference previous creative work and feedback"""
 }
 
-MEMORY_PROMPTS = {
-    "memory_extraction": """Based on the following conversation, extract important information about the user that should be remembered for future interactions. Focus on:
-- Personal preferences and interests
-- Goals and aspirations
-- Important life events or circumstances
-- Professional information
-- Relationship details that are relevant
-- Specific needs or challenges mentioned
-
-Format your response as a JSON object with clear, concise memory entries:
-{
-    "memories": [
-        {
-            "category": "preference|goal|personal|professional|relationship|challenge",
-            "content": "Clear, concise description of what to remember",
-            "importance": "high|medium|low",
-            "context": "Brief context about when/how this was mentioned"
-        }
-    ]
-}
-
-Conversation to analyze:
-{conversation_text}""",
-
-    "memory_relevance": """Given the user's current message and their stored memories, identify which memories are most relevant to provide helpful context for the response.
-
-Current message: {current_message}
-
-User memories:
+# Memory integration templates
+MEMORY_CONTEXT_TEMPLATES = {
+    "personal_context": """## What I Remember About You:
 {memories}
 
-Respond with a JSON object containing the most relevant memories:
-{
-    "relevant_memories": [
-        {
-            "memory_id": "memory_identifier",
-            "relevance_score": 0.9,
-            "reason": "Why this memory is relevant"
-        }
-    ]
-}"""
+""",
+
+    "goal_tracking": """## Your Goals & Progress:
+{memories}
+
+""",
+
+    "ongoing_situations": """## Ongoing Situations We've Discussed:
+{memories}
+
+""",
+
+    "preferences_learned": """## Your Preferences & Style:
+{memories}
+
+"""
 }
 
-RAG_PROMPTS = {
-    "context_integration": """You are responding to a user message with access to relevant context from their previous conversations and memories.
-
-Current message: {current_message}
-
-Relevant memories about the user:
-{relevant_memories}
-
-Recent conversation history (last {token_limit} tokens):
+# Conversation history formatting
+CONVERSATION_TEMPLATES = {
+    "recent_context": """## Recent Conversation Context:
 {conversation_history}
 
-Provide a helpful, personalized response that naturally incorporates relevant context without overwhelming the user."""
+""",
+
+    "continuation": """## Continuing Our Conversation:
+{conversation_history}
+
+User: {current_message}"""
 }
 
-def get_system_prompt(mode="conversational"):
+def get_system_prompt(mode: str = "conversational") -> str:
     """Get the system prompt for the specified chat mode."""
-    return SYSTEM_PROMPTS.get(mode, SYSTEM_PROMPTS["conversational"])
+    prompt = SYSTEM_PROMPTS.get(mode, SYSTEM_PROMPTS["conversational"])
+    logger.debug(f"Retrieved system prompt for mode: {mode}")
+    return prompt
 
-def get_memory_prompt(prompt_type="memory_extraction"):
-    """Get memory-related prompts for various operations."""
-    return MEMORY_PROMPTS.get(prompt_type, "")
-
-def get_rag_prompt(prompt_type="context_integration"):
-    """Get RAG-related prompts for context integration."""
-    return RAG_PROMPTS.get(prompt_type, "")
-
-def count_tokens(text: str, model: str = "gpt-4") -> int:
-    """Count tokens in text using tiktoken."""
-    try:
-        encoding = tiktoken.encoding_for_model(model)
-        return len(encoding.encode(text))
-    except Exception as e:
-        logger.warning(f"Error counting tokens: {e}. Using approximation.")
-        # Fallback approximation: ~4 characters per token
-        return len(text) // 4
-
-def truncate_conversation_history(messages: List[Dict], token_limit: int = 10000, model: str = "gpt-4") -> List[Dict]:
+def format_memory_context(memories: List[Dict], context_type: str = "personal_context") -> str:
     """
-    Truncate conversation history to stay within token limit.
-    Keeps the most recent messages that fit within the limit.
-    """
-    if not messages:
-        return []
-
-    try:
-        encoding = tiktoken.encoding_for_model(model)
-        truncated_messages = []
-        current_tokens = 0
-
-        # Start from the most recent message and work backwards
-        for message in reversed(messages):
-            message_text = f"{message.get('role', '')}: {message.get('content', '')}"
-            message_tokens = len(encoding.encode(message_text))
-
-            if current_tokens + message_tokens > token_limit:
-                break
-
-            truncated_messages.insert(0, message)
-            current_tokens += message_tokens
-
-        logger.info(f"Truncated conversation history to {len(truncated_messages)} messages ({current_tokens} tokens)")
-        return truncated_messages
-
-    except Exception as e:
-        logger.error(f"Error truncating conversation history: {e}")
-        # Fallback: return last 50 messages
-        return messages[-50:] if len(messages) > 50 else messages
-
-def format_memories_for_context(memories: List[Dict]) -> str:
-    """Format user memories for inclusion in prompts."""
-    if not memories:
-        return "No previous memories available."
-
-    formatted_memories = []
-    for memory in memories:
-        category = memory.get('category', 'general')
-        content = memory.get('content', '')
-        importance = memory.get('importance', 'medium')
-
-        formatted_memories.append(f"[{category.upper()}] {content} (Importance: {importance})")
-
-    return "\n".join(formatted_memories)
-
-def format_conversation_for_context(messages: List[Dict]) -> str:
-    """Format conversation messages for inclusion in prompts."""
-    if not messages:
-        return "No conversation history available."
-
-    formatted_messages = []
-    for message in messages:
-        role = message.get('role', 'user')
-        content = message.get('content', '')
-        timestamp = message.get('created_at', '')
-
-        if timestamp:
-            formatted_messages.append(f"[{timestamp}] {role}: {content}")
-        else:
-            formatted_messages.append(f"{role}: {content}")
-
-    return "\n".join(formatted_messages)
-
-def build_rag_context(current_message: str, memories: List[Dict], conversation_history: List[Dict],
-                     token_limit: int = 10000, model: str = "gpt-4") -> Dict[str, Any]:
-    """
-    Build comprehensive RAG context for LLM processing.
+    Format memories into a context string for the prompt.
 
     Args:
-        current_message: The user's current message
-        memories: List of relevant user memories
-        conversation_history: Recent conversation messages
-        token_limit: Maximum tokens for conversation history
-        model: OpenAI model name for token counting
+        memories: List of memory dictionaries with content, title, etc.
+        context_type: Type of memory context to format
 
     Returns:
-        Dictionary containing formatted context for LLM
+        Formatted memory context string
     """
+    if not memories:
+        return ""
+
     try:
-        # Truncate conversation history to fit within token limit
-        truncated_history = truncate_conversation_history(conversation_history, token_limit, model)
+        # Group memories by type for better organization
+        memory_groups = {}
+        for memory in memories:
+            mem_type = memory.get('memory_type', 'personal')
+            if mem_type not in memory_groups:
+                memory_groups[mem_type] = []
+            memory_groups[mem_type].append(memory)
 
-        # Format components
-        formatted_memories = format_memories_for_context(memories)
-        formatted_history = format_conversation_for_context(truncated_history)
+        # Format memories with better structure
+        formatted_memories = []
 
-        # Count tokens for logging
-        memory_tokens = count_tokens(formatted_memories, model)
-        history_tokens = count_tokens(formatted_history, model)
+        for mem_type, mem_list in memory_groups.items():
+            if mem_type == 'goal':
+                formatted_memories.append("### Goals & Objectives:")
+            elif mem_type == 'preference':
+                formatted_memories.append("### Personal Preferences:")
+            elif mem_type == 'relationship':
+                formatted_memories.append("### Relationships & People:")
+            elif mem_type == 'experience':
+                formatted_memories.append("### Important Experiences:")
+            else:
+                formatted_memories.append("### Personal Information:")
 
-        logger.info(f"RAG context built - Memories: {memory_tokens} tokens, History: {history_tokens} tokens")
+            for memory in mem_list:
+                title = memory.get('title', '').strip()
+                content = memory.get('content', '').strip()
 
-        return {
-            "current_message": current_message,
-            "relevant_memories": formatted_memories,
-            "conversation_history": formatted_history,
-            "token_limit": token_limit,
-            "memory_count": len(memories),
-            "message_count": len(truncated_history),
-            "total_context_tokens": memory_tokens + history_tokens
-        }
+                if title and title.lower() not in content.lower():
+                    formatted_memories.append(f"- **{title}**: {content}")
+                else:
+                    formatted_memories.append(f"- {content}")
+
+        memory_text = "\n".join(formatted_memories)
+        template = MEMORY_CONTEXT_TEMPLATES.get(context_type, MEMORY_CONTEXT_TEMPLATES["personal_context"])
+
+        logger.info(f"Formatted {len(memories)} memories into {context_type} context")
+        return template.format(memories=memory_text)
 
     except Exception as e:
-        logger.error(f"Error building RAG context: {e}")
-        return {
-            "current_message": current_message,
-            "relevant_memories": "Error loading memories",
-            "conversation_history": "Error loading conversation history",
-            "token_limit": token_limit,
-            "memory_count": 0,
-            "message_count": 0,
-            "total_context_tokens": 0
-        }
+        logger.error(f"Error formatting memory context: {str(e)}")
+        return ""
+
+def format_conversation_history(messages: List[Dict], max_tokens: int = 10000) -> str:
+    """
+    Format conversation history with token limit using tiktoken.
+
+    Args:
+        messages: List of message dictionaries
+        max_tokens: Maximum tokens to include
+
+    Returns:
+        Formatted conversation history string
+    """
+    if not messages:
+        return ""
+
+    try:
+        import tiktoken
+
+        # Use the encoding for GPT-4 (most common)
+        encoding = tiktoken.encoding_for_model("gpt-4")
+
+        formatted_messages = []
+        total_tokens = 0
+
+        # Process messages in reverse order (most recent first)
+        for message in reversed(messages):
+            role = message.get('role', 'user')
+            content = message.get('content', '').strip()
+            timestamp = message.get('created_at', '')
+
+            if not content:
+                continue
+
+            # Format message with role and timestamp
+            if timestamp:
+                try:
+                    # Parse timestamp and format nicely
+                    if isinstance(timestamp, str):
+                        dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                        time_str = dt.strftime("%H:%M")
+                        formatted_msg = f"[{time_str}] {role.title()}: {content}"
+                    else:
+                        formatted_msg = f"{role.title()}: {content}"
+                except:
+                    formatted_msg = f"{role.title()}: {content}"
+            else:
+                formatted_msg = f"{role.title()}: {content}"
+
+            # Count tokens for this message
+            msg_tokens = len(encoding.encode(formatted_msg))
+
+            # Check if adding this message would exceed token limit
+            if total_tokens + msg_tokens > max_tokens:
+                logger.info(f"Reached token limit ({max_tokens}), truncating conversation history")
+                break
+
+            formatted_messages.insert(0, formatted_msg)  # Insert at beginning to maintain order
+            total_tokens += msg_tokens
+
+        history_text = "\n".join(formatted_messages)
+
+        logger.info(f"Formatted conversation history: {len(formatted_messages)} messages, {total_tokens} tokens")
+        return history_text
+
+    except ImportError:
+        logger.warning("tiktoken not available, falling back to simple truncation")
+        # Fallback to simple message count limit
+        recent_messages = messages[-20:] if len(messages) > 20 else messages
+        formatted_messages = []
+
+        for message in recent_messages:
+            role = message.get('role', 'user')
+            content = message.get('content', '').strip()
+            if content:
+                formatted_messages.append(f"{role.title()}: {content}")
+
+        return "\n".join(formatted_messages)
+
+    except Exception as e:
+        logger.error(f"Error formatting conversation history: {str(e)}")
+        return ""
+
+def build_enhanced_prompt(
+    mode: str = "conversational",
+    memories: List[Dict] = None,
+    conversation_history: List[Dict] = None,
+    current_message: str = "",
+    user_name: str = "",
+    max_history_tokens: int = 10000
+) -> str:
+    """
+    Build a comprehensive prompt with system instructions, memories, and conversation context.
+
+    Args:
+        mode: Chat mode (conversational, coaching, etc.)
+        memories: List of relevant memories
+        conversation_history: List of recent messages
+        current_message: The current user message
+        user_name: User's name for personalization
+        max_history_tokens: Maximum tokens for conversation history
+
+    Returns:
+        Complete formatted prompt
+    """
+    try:
+        prompt_parts = []
+
+        # 1. System prompt
+        system_prompt = get_system_prompt(mode)
+        if user_name:
+            system_prompt += f"\n\nYou are speaking with {user_name}."
+        prompt_parts.append(system_prompt)
+
+        # 2. Memory context
+        if memories:
+            memory_context = format_memory_context(memories, "personal_context")
+            if memory_context:
+                prompt_parts.append(memory_context)
+
+        # 3. Conversation history
+        if conversation_history:
+            history_context = format_conversation_history(conversation_history, max_history_tokens)
+            if history_context:
+                template = CONVERSATION_TEMPLATES["recent_context"]
+                prompt_parts.append(template.format(conversation_history=history_context))
+
+        # 4. Current message
+        if current_message:
+            prompt_parts.append(f"User: {current_message}")
+
+        full_prompt = "\n".join(prompt_parts)
+
+        logger.info(f"Built enhanced prompt: mode={mode}, memories={len(memories) if memories else 0}, "
+                   f"history_messages={len(conversation_history) if conversation_history else 0}, "
+                   f"total_length={len(full_prompt)}")
+
+        return full_prompt
+
+    except Exception as e:
+        logger.error(f"Error building enhanced prompt: {str(e)}")
+        # Fallback to basic prompt
+        basic_prompt = get_system_prompt(mode)
+        if current_message:
+            basic_prompt += f"\n\nUser: {current_message}"
+        return basic_prompt
+
+# Additional utility functions for prompt management
+def get_available_modes() -> List[str]:
+    """Get list of available chat modes."""
+    return list(SYSTEM_PROMPTS.keys())
+
+def validate_mode(mode: str) -> bool:
+    """Check if a chat mode is valid."""
+    return mode in SYSTEM_PROMPTS
+
+def get_mode_description(mode: str) -> str:
+    """Get a brief description of what each mode does."""
+    descriptions = {
+        "conversational": "General friendly conversation with memory of past interactions",
+        "coaching": "Goal-oriented coaching and personal development support",
+        "therapeutic": "Emotional support and processing (not professional therapy)",
+        "productivity": "Work efficiency, time management, and productivity optimization",
+        "creative": "Creative projects, brainstorming, and artistic development"
+    }
+    return descriptions.get(mode, "Unknown mode")

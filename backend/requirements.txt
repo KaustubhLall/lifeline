@@ -13,5 +13,7 @@ tiktoken
 # comms
 twilio
 
+# math/ml
+numpy
 
 # connectors

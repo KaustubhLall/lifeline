@@ -21,8 +21,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 import os
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
-if not SECRET_KEY:
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-fallback-key-for-development-only-change-in-production')
+if not SECRET_KEY and not DEBUG:
     raise ValueError("The SECRET_KEY environment variable is not set. Please set it for production.")
 
 # SECURITY WARNING: don't run with debug turned on in production!
