@@ -268,8 +268,60 @@ jobs:
         # Check backend status
         if ! sudo systemctl is-active --quiet lifeline-backend; then
             echo "❌ Backend service failed to start"
-            sudo systemctl status lifeline-backend
-            sudo journalctl -u lifeline-backend --lines=20
+            echo ""
+            echo "🔍 DETAILED DEBUGGING INFORMATION:"
+            echo "=================================="
+            
+            echo "📋 Service Status:"
+            sudo systemctl status lifeline-backend --no-pager -l || true
+            
+            echo ""
+            echo "📋 Recent Service Logs:"
+            sudo journalctl -u lifeline-backend --no-pager --lines=50 || true
+            
+            echo ""
+            echo "🔍 Environment File Contents:"
+            sudo cat /etc/lifeline.env || echo "Environment file not found"
+            
+            echo ""
+            echo "🔍 Service File Contents:"
+            sudo cat /etc/systemd/system/lifeline-backend.service || echo "Service file not found"
+            
+            echo ""
+            echo "🐍 Virtual Environment Check:"
+            echo "Virtual env exists: $(test -d /home/ec2-user/lifeline/venv && echo 'YES' || echo 'NO')"
+            echo "Gunicorn exists: $(test -f /home/ec2-user/lifeline/venv/bin/gunicorn && echo 'YES' || echo 'NO')"
+            
+            echo ""
+            echo "🔍 Manual Test - Activating venv and checking Django:"
+            cd /home/ec2-user/lifeline/current/backend/LifeLine
+            if source /home/ec2-user/lifeline/venv/bin/activate; then
+                echo "✅ Virtual environment activated successfully"
+                echo "Python path: $(which python)"
+                echo "Gunicorn path: $(which gunicorn)"
+                echo "Django check:"
+                python -c "import django; print('Django version:', django.get_version())" || echo "❌ Django import failed"
+                echo "WSGI module check:"
+                python -c "from LifeLine import wsgi; print('✅ WSGI module loaded successfully')" || echo "❌ WSGI module import failed"
+            else
+                echo "❌ Failed to activate virtual environment"
+            fi
+            
+            echo ""
+            echo "🔍 Manual Gunicorn Test:"
+            cd /home/ec2-user/lifeline/current/backend/LifeLine
+            source /home/ec2-user/lifeline/venv/bin/activate
+            export DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY}"
+            export OPENAI_API_KEY="${OPENAI_API_KEY}"
+            export DEBUG=False
+            export ALLOWED_HOSTS="*"
+            timeout 10s gunicorn LifeLine.wsgi:application --bind 127.0.0.1:8001 --daemon || echo "❌ Manual gunicorn test failed"
+            sleep 2
+            curl -I http://127.0.0.1:8001 || echo "❌ Manual gunicorn not responding"
+            pkill -f "gunicorn.*8001" || true
+            
+            echo ""
+            echo "=================================="
             exit 1
         fi
         
@@ -278,7 +330,7 @@ jobs:
         sudo systemctl start nginx
         
         # Check nginx status
-        if ! sudo systemctl is-active --quiet nginx; then
+        if ! sudo systemctl is_active --quiet nginx; then
             echo "❌ Nginx service failed to start"
             sudo systemctl status nginx
             sudo nginx -t
