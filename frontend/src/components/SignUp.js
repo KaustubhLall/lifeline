@@ -31,7 +31,7 @@ function SignUp({ onLogin }) {
     }
 
     try {
-      const registerUrl = `${config.API_URL}/api/register/`;
+      const registerUrl = `${config.API_URL}/register/`;
 
       const response = await fetch(registerUrl, {
         method: 'POST',

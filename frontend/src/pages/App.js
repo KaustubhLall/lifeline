@@ -83,9 +83,15 @@ function App() {
 
     // Append speech transcription to input
     const handleSTTWithInput = async () => {
-        const transcribedText = await originalHandleSTT();
-        if (transcribedText) {
-            setInput(prev => (prev + ' ' + transcribedText).trim());
+        console.log('handleSTTWithInput called in App.js');
+        try {
+            const transcribedText = await originalHandleSTT();
+            console.log('Transcribed text:', transcribedText);
+            if (transcribedText) {
+                setInput(prev => (prev + ' ' + transcribedText).trim());
+            }
+        } catch (error) {
+            console.error('Error in handleSTTWithInput:', error);
         }
     };
 

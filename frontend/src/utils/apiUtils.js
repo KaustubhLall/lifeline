@@ -1,7 +1,7 @@
 import config from '../config';
 
 // Base URL for API requests
-export const API_BASE = `${config.API_URL}/api`;
+export const API_BASE = config.API_URL;
 
 // Perform fetch request with authorization header and JSON content type
 export const fetchWithAuth = async (url, options = {}) => {

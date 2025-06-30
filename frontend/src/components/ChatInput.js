@@ -2,6 +2,19 @@ import React from 'react';
 import '../styles/components/ChatInput.css';
 
 function ChatInput({onSend, onSTT, input, setInput, sttActive, sttSupported}) {
+    const handleSTTClick = async () => {
+        console.log('STT button clicked!', { sttSupported, sttActive });
+        if (onSTT) {
+            try {
+                await onSTT();
+            } catch (error) {
+                console.error('STT error:', error);
+            }
+        } else {
+            console.error('onSTT function not provided!');
+        }
+    };
+
     return (
         <form
             className="chat-input-form"
@@ -13,7 +26,7 @@ function ChatInput({onSend, onSTT, input, setInput, sttActive, sttSupported}) {
             <button
                 type="button"
                 className={`stt-button ${sttActive ? 'active' : ''} ${sttSupported ? '' : 'disabled'}`}
-                onClick={onSTT}
+                onClick={handleSTTClick}
                 title={sttSupported ? (sttActive ? "Recording..." : "Click to speak") : "Speech Recognition not supported"}
                 disabled={!sttSupported}
             >
