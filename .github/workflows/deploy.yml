@@ -67,7 +67,7 @@ jobs:
         WantedBy=multi-user.target" | sudo tee /etc/systemd/system/lifeline-backend.service'
         
         # Create nginx config with proper SSL setup
-        ssh -i private_key ${USER_NAME}@${HOSTNAME} 'sudo yum install -y openssl && sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/ssl-cert-snakeoil.key -out /etc/ssl/certs/ssl-cert-snakeoil.pem -subj "/C=US/ST=State/L=City/O=Organization/CN=localhost" || true'
+        ssh -i private_key ${USER_NAME}@${HOSTNAME} 'sudo mkdir -p /etc/ssl/private /etc/ssl/certs && sudo yum install -y openssl && sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/ssl-cert-snakeoil.key -out /etc/ssl/certs/ssl-cert-snakeoil.pem -subj "/C=US/ST=State/L=City/O=Organization/CN=localhost"'
         
         ssh -i private_key ${USER_NAME}@${HOSTNAME} 'echo "server {
             listen 80;
