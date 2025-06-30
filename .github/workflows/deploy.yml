@@ -359,7 +359,7 @@ jobs:
           export DJANGO_SECRET_KEY='${DJANGO_SECRET_KEY}'
           export OPENAI_API_KEY='${OPENAI_API_KEY}'
           chmod +x /tmp/lifeline-deployment/deploy.sh
-          sudo /tmp/lifeline-deployment/deploy.sh
+          sudo -E DJANGO_SECRET_KEY='${DJANGO_SECRET_KEY}' OPENAI_API_KEY='${OPENAI_API_KEY}' /tmp/lifeline-deployment/deploy.sh
         "
 
     - name: Verify deployment
