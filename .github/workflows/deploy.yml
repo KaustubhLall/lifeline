@@ -130,10 +130,29 @@ jobs:
         # Set up Python virtual environment
         echo "🐍 Setting up Python environment..."
         cd $APP_DIR/current/backend
+        
+        # Remove old venv if it exists to ensure clean install
+        rm -rf $VENV_DIR
+        
         python3 -m venv $VENV_DIR
         source $VENV_DIR/bin/activate
         pip install --upgrade pip
+        
+        echo "📦 Installing Python packages..."
         pip install -r requirements.txt
+        
+        # Verify gunicorn installation
+        echo "🔍 Verifying gunicorn installation..."
+        if [ -f "$VENV_DIR/bin/gunicorn" ]; then
+            echo "✅ Gunicorn found at $VENV_DIR/bin/gunicorn"
+        else
+            echo "❌ Gunicorn not found, forcing installation..."
+            pip install gunicorn
+        fi
+        
+        # List installed packages for debugging
+        echo "📋 Installed packages:"
+        pip list | grep -E "(django|gunicorn)" || echo "Key packages not found"
         
         # Django setup
         echo "⚙️ Configuring Django..."
