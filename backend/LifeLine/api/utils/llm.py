@@ -219,3 +219,104 @@ def call_llm_TTS(text: str, model: str = "tts-1", voice: str = "alloy") -> Optio
         logger.error(f"Text-to-speech conversion failed: {e}")
         logger.error(f"Full traceback: {traceback.format_exc()}")
         raise AudioProcessingError(f"Failed to convert text to speech: {e}")
+
+
+def call_llm_embedding(text: str, model: str = "text-embedding-ada-002") -> list:
+    """
+    Generate embeddings for text using OpenAI's embedding API.
+
+    Args:
+        text: The text to embed
+        model: The embedding model to use
+
+    Returns:
+        The embedding vector as a list of floats
+
+    Raises:
+        LLMError: If embedding generation fails
+    """
+    _log_call_info('call_llm_embedding', model=model, text_length=len(text))
+
+    try:
+        logger.info(f"Generating embedding - Model: {model}, Text length: {len(text)} chars")
+
+        response = client.embeddings.create(
+            model=model,
+            input=text
+        )
+
+        embedding = response.data[0].embedding
+        logger.info(f"Embedding generated successfully - Dimensions: {len(embedding)}")
+
+        return embedding
+
+    except Exception as e:
+        logger.error(f"Embedding generation failed: {e}")
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        raise LLMError(f"Failed to generate embedding: {e}")
+
+
+def call_llm_memory_extraction(message_content: str, model: str = "gpt-4o-mini") -> dict:
+    """
+    Extract memorable information from a message using LLM.
+
+    Args:
+        message_content: The message content to analyze
+        model: The model to use for extraction
+
+    Returns:
+        Dict containing extracted memory information or None if no memory found
+
+    Raises:
+        LLMError: If memory extraction fails
+    """
+    _log_call_info('call_llm_memory_extraction', model=model, content_length=len(message_content))
+
+    extraction_prompt = f"""
+    Analyze the following message and determine if it contains any information worth remembering about the user.
+    Look for:
+    - Personal information (name, age, location, job, relationships, etc.)
+    - Preferences (likes, dislikes, interests, hobbies)
+    - Goals or objectives
+    - Important facts or insights
+    - Context that might be useful later
+
+    If you find memorable information, respond with a JSON object containing:
+    {{
+        "has_memory": true,
+        "title": "Brief title for the memory",
+        "content": "The memorable information extracted",
+        "memory_type": "personal|preference|goal|insight|fact|context",
+        "importance_score": 0.0-1.0,
+        "tags": ["tag1", "tag2"],
+        "confidence": 0.0-1.0
+    }}
+
+    If no memorable information is found, respond with:
+    {{
+        "has_memory": false
+    }}
+
+    Message to analyze:
+    {message_content}
+    """
+
+    try:
+        logger.info(f"Extracting memory from message - Length: {len(message_content)} chars")
+
+        response = call_llm_text(extraction_prompt, model=model, temperature=0.1)
+
+        # Try to parse the JSON response
+        import json
+        try:
+            memory_data = json.loads(response)
+            logger.info(f"Memory extraction successful - Has memory: {memory_data.get('has_memory', False)}")
+            return memory_data
+        except json.JSONDecodeError:
+            logger.warning(f"Failed to parse memory extraction response as JSON: {response}")
+            return {"has_memory": False}
+
+    except Exception as e:
+        logger.error(f"Memory extraction failed: {e}")
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        raise LLMError(f"Failed to extract memory: {e}")
