@@ -69,7 +69,7 @@ def extract_and_store_memory(message: Message, user) -> Optional[Memory]:
         logger.error(f"[MEMORY EXTRACTION] Failed to extract memory from message {message.id}: {str(e)}")
         return None
 
-def get_relevant_memories(user, query: str, limit: int = 5, min_similarity: float = 0.7) -> List[Memory]:
+def get_relevant_memories(user, query: str, limit: int = 5, min_similarity: float = 0.3) -> List[Memory]:
     """
     Enhanced RAG: Get memories relevant to a query using semantic similarity with improved scoring.
 
@@ -77,7 +77,7 @@ def get_relevant_memories(user, query: str, limit: int = 5, min_similarity: floa
         user: The user whose memories to search
         query: The query to search for
         limit: Maximum number of memories to return
-        min_similarity: Minimum similarity threshold (0.0 to 1.0)
+        min_similarity: Minimum similarity threshold (0.0 to 1.0) - lowered to 0.3 for better recall
 
     Returns:
         List of relevant Memory objects sorted by relevance
@@ -97,6 +97,12 @@ def get_relevant_memories(user, query: str, limit: int = 5, min_similarity: floa
 
         logger.debug(f"[RAG RETRIEVAL] Found {memories.count()} memories with embeddings")
 
+        # If no memories with embeddings, fall back to recent important memories
+        if memories.count() == 0:
+            logger.info(f"[RAG RETRIEVAL] No embeddings found, falling back to recent important memories")
+            fallback_memories = Memory.objects.filter(user=user).order_by('-importance_score', '-updated_at')[:limit]
+            return list(fallback_memories)
+
         # Calculate similarities and apply enhanced scoring
         memory_scores = []
         for memory in memories:
@@ -105,18 +111,25 @@ def get_relevant_memories(user, query: str, limit: int = 5, min_similarity: floa
                 similarity = cosine_similarity(query_embedding, memory.embedding)
 
                 # Enhanced scoring factors
-                recency_boost = min(1.0, (timezone.now() - memory.updated_at).days / 30.0 * 0.1)
+                days_old = (timezone.now() - memory.updated_at).days
+                recency_boost = max(0.0, 1.0 - (days_old / 30.0)) * 0.1  # FIXED: Boost recent memories
                 importance_boost = memory.importance_score * 0.2
                 access_frequency_boost = min(0.1, memory.access_count / 10.0 * 0.05)
 
                 # Combined relevance score
-                relevance_score = similarity + importance_boost + access_frequency_boost - recency_boost
+                relevance_score = similarity + importance_boost + access_frequency_boost + recency_boost  # FIXED: Add recency boost
 
-                # Only include memories above similarity threshold
+                # Only include memories above similarity threshold (lowered to 0.3)
                 if similarity >= min_similarity:
                     memory_scores.append((memory, similarity, relevance_score))
                     logger.debug(f"[RAG RETRIEVAL] Memory {memory.id}: similarity={similarity:.3f}, "
-                               f"relevance={relevance_score:.3f}")
+                               f"relevance={relevance_score:.3f}, days_old={days_old}")
+
+        # If no memories meet similarity threshold, get top memories by importance
+        if not memory_scores:
+            logger.info(f"[RAG RETRIEVAL] No memories meet similarity threshold {min_similarity}, falling back to top memories")
+            fallback_memories = memories.order_by('-importance_score', '-updated_at')[:limit]
+            return list(fallback_memories)
 
         # Sort by relevance score and return top results
         memory_scores.sort(key=lambda x: x[2], reverse=True)  # Sort by relevance_score
@@ -133,14 +146,21 @@ def get_relevant_memories(user, query: str, limit: int = 5, min_similarity: floa
 
         # Log memory details for debugging
         for i, memory in enumerate(relevant_memories):
+            similarity_score = next((sim for mem, sim, rel in memory_scores if mem.id == memory.id), 0.0)
             logger.debug(f"[RAG RETRIEVAL] Result {i+1}: Memory {memory.id} - {memory.title or 'No title'} "
-                        f"(type: {memory.memory_type}, importance: {memory.importance_score})")
+                        f"(type: {memory.memory_type}, importance: {memory.importance_score}, similarity: {similarity_score:.3f})")
 
         return relevant_memories
 
     except Exception as e:
         logger.error(f"[RAG RETRIEVAL] Failed to get relevant memories for user {user.username}: {str(e)}")
-        return []
+        # Fallback to recent memories on error
+        try:
+            fallback_memories = Memory.objects.filter(user=user).order_by('-importance_score', '-updated_at')[:limit]
+            logger.info(f"[RAG RETRIEVAL] Error fallback: returning {len(fallback_memories)} recent memories")
+            return list(fallback_memories)
+        except:
+            return []
 
 def get_memories_by_type(user, memory_type: str, limit: int = 10) -> List[Memory]:
     """
