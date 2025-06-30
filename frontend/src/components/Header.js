@@ -77,6 +77,7 @@ function Header({
                                 setShowMobileMenu(!showMobileMenu);
                             }}
                             aria-label="Settings"
+                            aria-expanded={showMobileMenu}
                         >
                             <i className="bi bi-gear"></i>
                         </button>
