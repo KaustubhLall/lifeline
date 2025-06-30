@@ -16,8 +16,11 @@ from rest_framework.views import APIView
 from ..models.chat import Conversation, Message, MessageNote, Memory
 from ..serializers import MemorySerializer, MemoryCreateSerializer
 from ..utils.llm import call_llm_text, APIBudgetError, ModelNotAvailableError, LLMError
-from ..utils.prompts import get_system_prompt
-from ..utils.memory_utils import extract_and_store_memory, get_relevant_memories, generate_memory_context
+from ..utils.prompts import build_enhanced_prompt, get_system_prompt, validate_mode
+from ..utils.memory_utils import (
+    extract_and_store_memory, get_relevant_memories, generate_memory_context,
+    get_conversation_memories, rerank_memories_by_context
+)
 
 # Configure logging with filename and line numbers
 logging.basicConfig(
@@ -239,67 +242,124 @@ class MessageListCreateView(APIView):
             memory_thread.daemon = True
             memory_thread.start()
 
-            # Get relevant memories for context
-            relevant_memories = get_relevant_memories(request.user, user_message, limit=3)
-            memory_context = generate_memory_context(relevant_memories)
+            logger.info(f"[ENHANCED RAG] Starting enhanced conversation processing for user {request.user.username}")
 
-            # Get conversation history
-            recent_messages = conversation.messages.order_by('-created_at')[:5]
-            conversation_context = "\n".join([
-                f"{m.role}: {m.content}"
-                for m in reversed(recent_messages)
-            ])
+            # Get relevant memories using enhanced RAG
+            logger.info(f"[ENHANCED RAG] Retrieving relevant memories for query: '{user_message[:100]}...'")
+            relevant_memories = get_relevant_memories(
+                user=request.user,
+                query=user_message,
+                limit=5,  # Increased from 3 for better context
+                min_similarity=0.6  # Lower threshold for more inclusive results
+            )
 
-            # Get system prompt for the selected mode
-            system_prompt = get_system_prompt(mode)
+            # Get conversation-specific memories
+            conversation_memories = get_conversation_memories(
+                user=request.user,
+                conversation=conversation,
+                limit=3
+            )
 
-            # Prepare the full prompt with context and memories
-            prompt_parts = [system_prompt]
+            # Combine and deduplicate memories
+            all_memories = list({m.id: m for m in (relevant_memories + conversation_memories)}.values())
+            logger.info(f"[ENHANCED RAG] Combined {len(all_memories)} unique memories (relevant: {len(relevant_memories)}, conversation: {len(conversation_memories)})")
 
-            if memory_context:
-                prompt_parts.append(f"\n{memory_context}")
+            # Get conversation history with token counting
+            logger.info(f"[CONVERSATION HISTORY] Retrieving conversation history with 10,000 token limit")
+            all_messages = list(conversation.messages.order_by('created_at'))
 
-            prompt_parts.extend([
-                f"\nPrevious messages:\n{conversation_context}",
-                f"\nUser: {user_message}"
-            ])
+            # Convert messages to dictionary format for token counting
+            message_history = []
+            for msg in all_messages:
+                message_dict = {
+                    'role': msg.role,
+                    'content': msg.content,
+                    'created_at': msg.created_at.isoformat() if msg.created_at else None,
+                    'is_bot': msg.is_bot
+                }
+                message_history.append(message_dict)
 
-            prompt = "\n".join(prompt_parts)
+            # Validate chat mode
+            if not validate_mode(mode):
+                logger.warning(f"[PROMPT BUILDING] Invalid chat mode '{mode}', falling back to 'conversational'")
+                mode = 'conversational'
 
-            logger.info(f"Calling LLM with context length: {len(conversation_context)}, memory context length: {len(memory_context)}, total prompt length: {len(prompt)}")
+            # Build enhanced prompt with all context
+            logger.info(f"[PROMPT BUILDING] Building enhanced prompt with mode='{mode}', {len(all_memories)} memories, {len(message_history)} history messages")
+
+            enhanced_prompt = build_enhanced_prompt(
+                mode=mode,
+                memories=[{
+                    'content': m.content,
+                    'title': m.title,
+                    'memory_type': m.memory_type,
+                    'importance_score': m.importance_score,
+                    'created_at': m.created_at.isoformat() if m.created_at else None,
+                    'tags': m.tags or []
+                } for m in all_memories],
+                conversation_history=message_history,
+                current_message=user_message,
+                user_name=request.user.first_name or request.user.username,
+                max_history_tokens=10000  # Use 10k token limit as requested
+            )
+
+            logger.info(f"[PROMPT BUILDING] Enhanced prompt built - Total length: {len(enhanced_prompt)} characters")
+            logger.debug(f"[PROMPT BUILDING] Final prompt preview: {enhanced_prompt[:500]}...")
 
             try:
-                bot_response = call_llm_text(prompt, model=model)
-                logger.info(
-                    f"Received response from LLM for conversation {conversation_id}, response length: {len(bot_response)}")
+                logger.info(f"[LLM CALL] Calling LLM with model={model}, prompt_length={len(enhanced_prompt)}")
+                bot_response = call_llm_text(enhanced_prompt, model=model)
+                logger.info(f"[LLM CALL] Received response - Length: {len(bot_response)} characters")
 
-                # Create bot message
+                # Create bot message with enhanced metadata
                 bot_msg = Message.objects.create(
                     conversation=conversation,
                     sender=request.user,
                     content=bot_response,
                     is_bot=True,
                     role='assistant',
-                    metadata={'model': model, 'mode': mode, 'used_memories': len(relevant_memories)}
+                    metadata={
+                        'model': model,
+                        'mode': mode,
+                        'used_memories': len(all_memories),
+                        'relevant_memories': len(relevant_memories),
+                        'conversation_memories': len(conversation_memories),
+                        'prompt_length': len(enhanced_prompt),
+                        'response_length': len(bot_response),
+                        'history_messages_included': len(message_history)
+                    }
                 )
 
-                logger.info(f"Created bot message {bot_msg.id} in conversation {conversation_id}")
+                logger.info(f"[MESSAGE CREATION] Created bot message {bot_msg.id} with enhanced metadata")
 
-                # Update conversation context
+                # Update conversation context with enhanced information
                 conversation.context = {
                     'last_user_message': user_message,
                     'last_bot_response': bot_response,
                     'message_count': conversation.messages.count(),
                     'current_mode': mode,
                     'current_model': model,
-                    'memories_used': len(relevant_memories)
+                    'memories_used': len(all_memories),
+                    'last_rag_retrieval': {
+                        'relevant_memories': len(relevant_memories),
+                        'conversation_memories': len(conversation_memories),
+                        'total_memories': len(all_memories),
+                        'retrieval_timestamp': str(timezone.now())
+                    },
+                    'last_prompt_stats': {
+                        'prompt_length': len(enhanced_prompt),
+                        'history_messages': len(message_history),
+                        'mode_used': mode
+                    }
                 }
                 conversation.save()
+
+                logger.info(f"[CONVERSATION UPDATE] Updated conversation {conversation_id} context with enhanced stats")
 
                 return Response({
                     'id': bot_msg.id,
                     'sender': bot_msg.sender_id,
-                    'content': bot_msg.content,
+                    'content': bot_response,
                     'created_at': bot_msg.created_at,
                     'is_bot': True,
                     'role': 'assistant',
