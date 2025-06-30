@@ -7,7 +7,7 @@ export function useConversations(authenticated, onLogout) {
     const [messages, setMessages] = useState([]);
     const [error, setError] = useState(null);
 
-    // Fetch conversations
+    // Load user conversations when authenticated
     useEffect(() => {
         if (!authenticated) return;
 
@@ -33,7 +33,7 @@ export function useConversations(authenticated, onLogout) {
             });
     }, [authenticated, onLogout]);
 
-    // Fetch messages for current conversation
+    // Load messages whenever the active conversation changes
     useEffect(() => {
         if (!authenticated || !currentId) {
             console.log('Skipping message fetch:', { authenticated, currentId });
@@ -57,11 +57,12 @@ export function useConversations(authenticated, onLogout) {
             });
     }, [currentId, authenticated]);
 
-    // Select first conversation by default
+    // Initialize active conversation to first in list
     useEffect(() => {
         if (conversations.length && !currentId) setCurrentId(conversations[0].id);
     }, [conversations, currentId]);
 
+    // Create a new conversation and set it as active
     const handleNewChat = useCallback(async () => {
         try {
             const response = await fetchWithAuth(`${API_BASE}/conversations/`, {
@@ -87,6 +88,7 @@ export function useConversations(authenticated, onLogout) {
         }
     }, []);
 
+    // Send message optimistically; append bot response on success
     const sendMessage = useCallback(async (content, selectedModel, chatMode, userId) => {
         if (!content.trim() || !currentId) return;
 
@@ -133,8 +135,10 @@ export function useConversations(authenticated, onLogout) {
         }
     }, [currentId]);
 
+    // Clear any existing error state
     const clearError = useCallback(() => setError(null), []);
 
+    // Reset all conversation data
     const resetConversations = useCallback(() => {
         setConversations([]);
         setCurrentId(null);

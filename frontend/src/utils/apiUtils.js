@@ -1,9 +1,9 @@
 import config from '../config';
 
-// API endpoints
+// Base URL for API requests
 export const API_BASE = `${config.API_URL}/api`;
 
-// Helper function to add auth headers
+// Perform fetch request with authorization header and JSON content type
 export const fetchWithAuth = async (url, options = {}) => {
     const token = localStorage.getItem('authToken');
     try {

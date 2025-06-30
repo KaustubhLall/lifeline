@@ -4,7 +4,7 @@ export function useMobileLayout() {
     const [showSidebar, setShowSidebar] = useState(false);
     const [showMobileMenu, setShowMobileMenu] = useState(false);
 
-    // Close mobile menu when clicking outside
+    // Hide menus when clicking outside their active elements
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (showMobileMenu && !event.target.closest('.mobile-dropdown')) {
@@ -19,22 +19,27 @@ export function useMobileLayout() {
         return () => document.removeEventListener('click', handleClickOutside);
     }, [showMobileMenu, showSidebar]);
 
+    // Toggle sidebar visibility
     const toggleSidebar = useCallback(() => {
         setShowSidebar(prev => !prev);
     }, []);
 
+    // Close sidebar
     const closeSidebar = useCallback(() => {
         setShowSidebar(false);
     }, []);
 
+    // Toggle mobile settings menu
     const toggleMobileMenu = useCallback(() => {
         setShowMobileMenu(prev => !prev);
     }, []);
 
+    // Close mobile settings menu
     const closeMobileMenu = useCallback(() => {
         setShowMobileMenu(false);
     }, []);
 
+    // Reset all layout states to initial
     const resetLayout = useCallback(() => {
         setShowSidebar(false);
         setShowMobileMenu(false);
