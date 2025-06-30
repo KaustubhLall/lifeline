@@ -47,6 +47,9 @@ jobs:
         # Django setup
         ssh -i private_key ${USER_NAME}@${HOSTNAME} 'cd /home/ec2-user/lifeline/backend/LifeLine && source /home/ec2-user/lifeline/venv/bin/activate && DJANGO_SECRET_KEY='"'"'${{ secrets.DJANGO_SECRET_KEY }}'"'"' OPENAI_API_KEY='"'"'${{ secrets.OPENAI_API_KEY }}'"'"' python manage.py migrate && DJANGO_SECRET_KEY='"'"'${{ secrets.DJANGO_SECRET_KEY }}'"'"' OPENAI_API_KEY='"'"'${{ secrets.OPENAI_API_KEY }}'"'"' python manage.py collectstatic --noinput'
         
+        # Create environment file for systemd
+        ssh -i private_key ${USER_NAME}@${HOSTNAME} 'echo "DJANGO_SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}" | sudo tee /etc/lifeline.env && echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" | sudo tee -a /etc/lifeline.env && sudo chmod 644 /etc/lifeline.env'
+        
         # Create systemd service
         ssh -i private_key ${USER_NAME}@${HOSTNAME} 'echo "[Unit]
         Description=LifeLine Django Backend
@@ -56,8 +59,7 @@ jobs:
         Type=simple
         User=ec2-user
         WorkingDirectory=/home/ec2-user/lifeline/backend/LifeLine
-        Environment=DJANGO_SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}
-        Environment=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+        EnvironmentFile=/etc/lifeline.env
         ExecStart=/home/ec2-user/lifeline/venv/bin/gunicorn LifeLine.wsgi:application --bind 0.0.0.0:8000
         Restart=always
         
@@ -67,7 +69,12 @@ jobs:
         # Create nginx config
         ssh -i private_key ${USER_NAME}@${HOSTNAME} 'echo "server {
             listen 80;
+            listen 443 ssl;
             server_name _;
+            
+            # For HTTPS, use self-signed cert (optional)
+            ssl_certificate /etc/ssl/certs/ssl-cert-snakeoil.pem;
+            ssl_certificate_key /etc/ssl/private/ssl-cert-snakeoil.key;
             
             root /home/ec2-user/lifeline/frontend;
             index index.html;
@@ -80,8 +87,12 @@ jobs:
                 proxy_pass http://127.0.0.1:8000;
                 proxy_set_header Host \$host;
                 proxy_set_header X-Real-IP \$remote_addr;
+                proxy_set_header X-Forwarded-Proto \$scheme;
             }
         }" | sudo tee /etc/nginx/conf.d/lifeline.conf'
         
         # Start services
         ssh -i private_key ${USER_NAME}@${HOSTNAME} 'sudo systemctl daemon-reload && sudo systemctl enable lifeline-backend && sudo systemctl start lifeline-backend && sudo systemctl enable nginx && sudo systemctl start nginx'
+        
+        # Check if services are running and debug issues
+        ssh -i private_key ${USER_NAME}@${HOSTNAME} 'echo "=== Service Status ===" && sudo systemctl is-active lifeline-backend && sudo systemctl is-active nginx && echo "=== Port Check ===" && sudo netstat -tulpn | grep -E ":(80|8000)" && echo "=== Test Django directly ===" && curl -I http://localhost:8000 && echo "=== Test nginx ===" && curl -I http://localhost:80 && echo "=== Nginx error log ===" && sudo tail -n 20 /var/log/nginx/error.log && echo "=== Django logs ===" && sudo journalctl -u lifeline-backend --no-pager --lines=10'
