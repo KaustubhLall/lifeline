@@ -315,3 +315,187 @@ For support and questions:
 ---
 
 **LifeLine** - Where AI remembers, understands, and grows with you.
+
+## 🚀 Deployment
+
+### Prerequisites
+
+Before deploying, ensure you have:
+- AWS EC2 instance running Amazon Linux 2
+- GitHub repository with your code
+- Required GitHub Secrets configured
+- Domain name or public IP address
+
+### GitHub Secrets Setup
+
+Configure these secrets in your GitHub repository (Settings → Secrets and variables → Actions):
+
+| Secret Name | Description | Example |
+|-------------|-------------|---------|
+| `EC2_SSH_PRIVATE_KEY` | Your EC2 private key (.pem file content) | `-----BEGIN RSA PRIVATE KEY-----...` |
+| `EC2_HOSTNAME` | Your EC2 public IP address | `54.144.219.238` |
+| `EC2_USER_NAME` | EC2 username (usually `ec2-user`) | `ec2-user` |
+| `DJANGO_SECRET_KEY` | Django secret key for production | `your-secret-key-here` |
+| `OPENAI_API_KEY` | OpenAI API key for AI features | `sk-...` |
+
+### Deployment Methods
+
+#### Method 1: Manual Trigger (Recommended)
+
+1. **Go to GitHub Actions**:
+   - Navigate to your repository on GitHub
+   - Click the **Actions** tab
+   - Select **Deploy to EC2** workflow
+
+2. **Click "Run workflow"**:
+   - Click the **Run workflow** button
+   - Choose the branch you want to deploy from the dropdown
+   - Click **Run workflow** to start deployment
+
+3. **Monitor Progress**:
+   - Watch the real-time logs in the Actions tab
+   - Each step will show progress and any errors
+
+#### Method 2: Automatic Deployment
+
+The workflow automatically triggers on:
+- **Push to main branch**: `git push origin main`
+- **Push to develop branch**: `git push origin develop`
+- **Pull requests to main**: When you create a PR targeting main
+
+### Deployment Process
+
+The automated deployment performs these steps:
+
+1. **Build Phase**:
+   - Installs Node.js and Python dependencies
+   - Builds React frontend for production
+   - Runs backend tests (optional)
+
+2. **Deploy Phase**:
+   - Copies files to your EC2 instance via SSH
+   - Sets up Python virtual environment
+   - Configures Nginx web server
+   - Creates systemd service for Django backend
+   - Applies database migrations
+
+3. **Health Check**:
+   - Verifies frontend is accessible
+   - Tests backend API endpoints
+   - Confirms all services are running
+
+### Post-Deployment
+
+After successful deployment, your application will be available at:
+
+- **Frontend**: `http://your-ec2-ip/`
+- **Backend API**: `http://your-ec2-ip/api/`
+- **Health Check**: `http://your-ec2-ip/api/health/`
+- **Django Admin**: `http://your-ec2-ip/admin/`
+
+### Troubleshooting Deployment
+
+#### Common Issues
+
+1. **SSH Connection Failed**:
+   ```bash
+   # Check your private key format
+   # Ensure EC2 security group allows SSH (port 22)
+   # Verify the hostname/IP is correct
+   ```
+
+2. **Frontend Build Errors**:
+   ```bash
+   # Ensure package.json and package-lock.json are committed
+   # Check Node.js version compatibility
+   ```
+
+3. **Backend Service Issues**:
+   ```bash
+   # SSH into your EC2 instance to check logs:
+   ssh -i your-key.pem ec2-user@your-ip
+   sudo journalctl -u lifeline-backend -f
+   ```
+
+4. **Nginx Configuration**:
+   ```bash
+   # Check Nginx status and logs:
+   sudo systemctl status nginx
+   sudo tail -f /var/log/nginx/error.log
+   ```
+
+#### Manual Deployment Verification
+
+SSH into your EC2 instance and run:
+
+```bash
+# Check backend service
+sudo systemctl status lifeline-backend
+
+# Check nginx service
+sudo systemctl status nginx
+
+# Test backend API directly
+curl http://localhost:8000/api/health/
+
+# Test frontend
+curl http://localhost/
+```
+
+### Updating Your Deployment
+
+To deploy updates:
+
+1. **Push changes** to your repository
+2. **Trigger deployment** using GitHub Actions
+3. The system will automatically:
+   - Stop existing services
+   - Backup current deployment
+   - Install new version
+   - Restart services
+
+### Rollback Procedure
+
+If deployment fails, you can rollback:
+
+```bash
+# SSH into your EC2 instance
+ssh -i your-key.pem ec2-user@your-ip
+
+# List available backups
+ls -la /home/ec2-user/lifeline/backup-*
+
+# Restore from backup (replace with actual backup timestamp)
+sudo systemctl stop lifeline-backend nginx
+sudo mv /home/ec2-user/lifeline/current /home/ec2-user/lifeline/failed-deployment
+sudo mv /home/ec2-user/lifeline/backup-YYYYMMDD_HHMMSS /home/ec2-user/lifeline/current
+sudo systemctl start lifeline-backend nginx
+```
+
+### Local Development Setup
+
+For local development without deployment:
+
+1. **Backend Setup**:
+   ```bash
+   cd backend
+   pip install -r requirements.txt
+   cd LifeLine
+   python manage.py migrate
+   python manage.py runserver
+   ```
+
+2. **Frontend Setup**:
+   ```bash
+   cd frontend
+   npm install
+   npm start
+   ```
+
+3. **Environment Variables**:
+   Create `.env` file in backend/LifeLine/:
+   ```
+   DJANGO_SECRET_KEY=your-dev-secret-key
+   OPENAI_API_KEY=your-openai-key
+   DEBUG=True
+   ```

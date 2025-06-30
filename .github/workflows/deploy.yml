@@ -6,6 +6,17 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:  # Allow manual triggering
+    inputs:
+      branch:
+        description: 'Branch to deploy'
+        required: true
+        default: 'main'
+        type: choice
+        options:
+          - main
+          - develop
+          - staging
+          - feature/branch-name
 
 jobs:
   deploy:
@@ -14,6 +25,16 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+
+    # Ensure package-lock.json exists before Node.js setup
+    - name: Check for package-lock.json
+      run: |
+        if [ ! -f frontend/package-lock.json ]; then
+          echo "Generating package-lock.json for caching..."
+          cd frontend
+          npm install --package-lock-only
+          cd ..
+        fi
 
     - name: Set up Node.js
       uses: actions/setup-node@v4
@@ -39,10 +60,21 @@ jobs:
       working-directory: ./frontend
       run: |
         echo "Installing frontend dependencies..."
-        # Generate package-lock.json if it doesn't exist
+        # Check if package-lock.json exists and is in sync
         if [ ! -f package-lock.json ]; then
+          echo "No package-lock.json found, generating..."
           npm install --package-lock-only
+        else
+          echo "Checking if package-lock.json is in sync with package.json..."
+          # Try npm ci first, if it fails, regenerate lock file
+          if ! npm ci --dry-run 2>/dev/null; then
+            echo "package-lock.json is out of sync, regenerating..."
+            rm -f package-lock.json
+            npm install --package-lock-only
+          fi
         fi
+        
+        # Install dependencies
         npm ci
         echo "Frontend dependencies installed"
 
