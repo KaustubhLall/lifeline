@@ -102,5 +102,13 @@ jobs:
         # Start services
         ssh -i private_key ${USER_NAME}@${HOSTNAME} 'sudo systemctl daemon-reload && sudo systemctl enable lifeline-backend && sudo systemctl start lifeline-backend && sudo systemctl enable nginx && sudo systemctl start nginx'
         
+        # Set up frontend with proper permissions
+        echo "🌐 Setting up frontend..."
+        sudo rm -rf /var/www/html/lifeline
+        sudo mkdir -p /var/www/html/lifeline
+        sudo cp -r $APP_DIR/current/frontend/* /var/www/html/lifeline/
+        sudo chown -R nginx:nginx /var/www/html/lifeline
+        sudo chmod -R 755 /var/www/html/lifeline
+        
         # Check if services are running and debug issues
         ssh -i private_key ${USER_NAME}@${HOSTNAME} 'echo "=== Service Status ===" && sudo systemctl is-active lifeline-backend && sudo systemctl is-active nginx && echo "=== Port Check ===" && sudo netstat -tulpn | grep -E ":(80|8000)" && echo "=== Test Django directly ===" && curl -I http://localhost:8000 && echo "=== Test nginx ===" && curl -I http://localhost:80 && echo "=== Nginx error log ===" && sudo tail -n 20 /var/log/nginx/error.log && echo "=== Django logs ===" && sudo journalctl -u lifeline-backend --no-pager --lines=10'
