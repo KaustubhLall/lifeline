@@ -8,21 +8,21 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '18'
-        
+
     - name: Build frontend
       working-directory: ./frontend
       run: |
         npm ci
         npm run build
-        
+
     - name: Deploy to EC2
       env:
         PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
@@ -38,14 +38,14 @@ jobs:
         ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} 'sudo systemctl stop lifeline-backend || true; sudo systemctl stop nginx || true; sudo rm -rf /home/ec2-user/lifeline; mkdir -p /home/ec2-user/lifeline'
         
         # Copy files
-        scp -i private_key -r frontend/build ${USER_NAME}@${HOSTNAME}:/home/ec2-user/lifeline/frontend
-        scp -i private_key -r backend ${USER_NAME}@${HOSTNAME}:/home/ec2-user/lifeline/backend
+        scp -i private_key -r frontend/build ${USER_NAME}@${HOSTNAME}:/home/ec2-user/lifeline/current/frontend
+        scp -i private_key -r backend ${USER_NAME}@${HOSTNAME}:/home/ec2-user/lifeline/current/backend
         
         # Install and configure
         ssh -i private_key ${USER_NAME}@${HOSTNAME} 'cd /home/ec2-user/lifeline && python3 -m venv venv && source venv/bin/activate && pip install -r backend/requirements.txt && pip install gunicorn'
         
         # Django setup
-        ssh -i private_key ${USER_NAME}@${HOSTNAME} 'cd /home/ec2-user/lifeline/backend/LifeLine && source /home/ec2-user/lifeline/venv/bin/activate && DJANGO_SECRET_KEY='"'"'${{ secrets.DJANGO_SECRET_KEY }}'"'"' OPENAI_API_KEY='"'"'${{ secrets.OPENAI_API_KEY }}'"'"' python manage.py migrate && DJANGO_SECRET_KEY='"'"'${{ secrets.DJANGO_SECRET_KEY }}'"'"' OPENAI_API_KEY='"'"'${{ secrets.OPENAI_API_KEY }}'"'"' python manage.py collectstatic --noinput'
+        ssh -i private_key ${USER_NAME}@${HOSTNAME} 'cd /home/ec2-user/lifeline/current/backend/LifeLine && source /home/ec2-user/lifeline/current/venv/bin/activate && DJANGO_SECRET_KEY='"'"'${{ secrets.DJANGO_SECRET_KEY }}'"'"' OPENAI_API_KEY='"'"'${{ secrets.OPENAI_API_KEY }}'"'"' python manage.py migrate && DJANGO_SECRET_KEY='"'"'${{ secrets.DJANGO_SECRET_KEY }}'"'"' OPENAI_API_KEY='"'"'${{ secrets.OPENAI_API_KEY }}'"'"' python manage.py collectstatic --noinput'
         
         # Create systemd service
         ssh -i private_key ${USER_NAME}@${HOSTNAME} 'echo "[Unit]
@@ -55,10 +55,10 @@ jobs:
         [Service]
         Type=simple
         User=ec2-user
-        WorkingDirectory=/home/ec2-user/lifeline/backend/LifeLine
+        WorkingDirectory=/home/ec2-user/lifeline/current/backend/LifeLine
         Environment=DJANGO_SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}
         Environment=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-        ExecStart=/home/ec2-user/lifeline/venv/bin/gunicorn LifeLine.wsgi:application --bind 0.0.0.0:8000
+        ExecStart=/home/ec2-user/lifeline/current/venv/bin/gunicorn LifeLine.wsgi:application --bind 0.0.0.0:8000
         Restart=always
         
         [Install]
@@ -69,7 +69,7 @@ jobs:
             listen 80;
             server_name _;
             
-            root /home/ec2-user/lifeline/frontend;
+            root /home/ec2-user/lifeline/current/frontend;
             index index.html;
             
             location / {
