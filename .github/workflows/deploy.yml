@@ -154,9 +154,11 @@ jobs:
         echo "✅ Environment variables verified"
         
         # Apply migrations
+        echo "📋 Applying migrations..."
         DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY}" OPENAI_API_KEY="${OPENAI_API_KEY}" python manage.py migrate --noinput
         
         # Collect static files
+        echo "📁 Collecting static files..."
         DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY}" OPENAI_API_KEY="${OPENAI_API_KEY}" python manage.py collectstatic --noinput --clear
         
         # Set up frontend
