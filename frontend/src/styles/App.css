@@ -1,200 +1,202 @@
 /* Global CSS Variables for Consistent Theming */
 :root {
-  /* Color Palette */
-  --primary-color: #007bff;
-  --primary-hover: #0056b3;
-  --primary-focus-shadow: rgba(0, 123, 255, 0.25);
-  --secondary-color: #6c757d;
-  --accent-color: #dc3545;
+    /* Color Palette */
+    --primary-color: #007bff;
+    --primary-hover: #0056b3;
+    --primary-focus-shadow: rgba(0, 123, 255, 0.25);
+    --secondary-color: #6c757d;
+    --accent-color: #dc3545;
 
-  /* Background Colors - Dark Theme */
-  --sidebar-bg: #1e1e2e;
-  --chat-bg: #16213e;
-  --input-bg: #1a1a2e;
-  --input-field-bg: #2d3748;
-  --hover-bg: rgba(255, 255, 255, 0.1);
-  --active-bg: rgba(0, 123, 255, 0.2);
+    /* Background Colors - Dark Theme */
+    --sidebar-bg: #1e1e2e;
+    --chat-bg: #16213e;
+    --input-bg: #1a1a2e;
+    --input-field-bg: #2d3748;
+    --hover-bg: rgba(255, 255, 255, 0.1);
+    --active-bg: rgba(0, 123, 255, 0.2);
 
-  /* Text Colors - Dark Theme */
-  --text-color: #ffffff;
-  --text-muted: #d0d8e0;
-  --text-light: #adb5bd;
-  --active-text: #007bff;
+    /* Text Colors - Dark Theme */
+    --text-color: #ffffff;
+    --text-muted: #d0d8e0;
+    --text-light: #adb5bd;
+    --active-text: #007bff;
 
-  /* Message Colors */
-  --user-message-bg: #007bff;
-  --user-message-text: #ffffff;
-  --bot-message-bg: #2d3748;
-  --bot-message-text: #ffffff;
+    /* Message Colors */
+    --user-message-bg: #007bff;
+    --user-message-text: #ffffff;
+    --bot-message-bg: #2d3748;
+    --bot-message-text: #ffffff;
 
-  /* Border Colors - Dark Theme */
-  --border-color: #2d3748;
-  --border-light: #404040;
+    /* Border Colors - Dark Theme */
+    --border-color: #2d3748;
+    --border-light: #404040;
 
-  /* Error States */
-  --error-bg: #dc3545;
-  --error-text: #ffffff;
-  --error-border: #dc3545;
+    /* Error States */
+    --error-bg: #dc3545;
+    --error-text: #ffffff;
+    --error-border: #dc3545;
 
-  /* Layout */
-  --sidebar-width: 280px;
-  --header-height: 70px;
-  --mobile-header-height: 60px;
-  --mobile-breakpoint: 768px;
+    /* Layout */
+    --sidebar-width: 280px;
+    --header-height: 70px;
+    --mobile-header-height: 60px;
+    --mobile-breakpoint: 768px;
 }
 
 /* Dark Theme Support */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --sidebar-bg: #1e1e1e;
-    --chat-bg: #121212;
-    --input-bg: #1e1e1e;
-    --input-field-bg: #2d2d2d;
-    --hover-bg: #333333;
-    --active-bg: #1a237e;
-    --bot-message-bg: #2d2d2d;
-    --border-color: #404040;
-    --border-light: #333333;
-  }
+    :root {
+        --sidebar-bg: #1e1e1e;
+        --chat-bg: #121212;
+        --input-bg: #1e1e1e;
+        --input-field-bg: #2d2d2d;
+        --hover-bg: #333333;
+        --active-bg: #1a237e;
+        --bot-message-bg: #2d2d2d;
+        --border-color: #404040;
+        --border-light: #333333;
+    }
 }
 
 /* Main App Layout */
 .app-container {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  overflow: hidden;
-  background-color: var(--chat-bg);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+    background-color: var(--chat-bg);
 }
 
 .main-content {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  padding-top: var(--header-height);
-  position: relative;
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    padding-top: var(--header-height);
+    position: relative;
 }
 
 /* Mobile Overlay */
 .mobile-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
-  z-index: 1040;
-  display: none;
-  transition: opacity 0.3s ease;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1040;
+    display: none;
+    transition: opacity 0.3s ease;
 }
 
 .mobile-overlay.show {
-  display: block;
-  opacity: 1;
+    display: block;
+    opacity: 1;
 }
 
 /* Sidebar Container */
 .sidebar-container {
-  width: var(--sidebar-width);
-  position: fixed;
-  top: var(--header-height);
-  bottom: 0;
-  left: 0;
-  z-index: 1045;
-  transform: translateX(-100%);
-  transition: transform 0.3s ease-in-out;
+    width: var(--sidebar-width);
+    position: fixed;
+    top: var(--header-height);
+    bottom: 0;
+    left: 0;
+    z-index: 1045;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease-in-out;
 }
 
 .sidebar-container.show {
-  transform: translateX(0);
+    transform: translateX(0);
 }
 
 /* Chat Area */
 .chat-area {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  margin-left: 0;
-  transition: margin-left 0.3s ease-in-out;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    margin-left: 0;
+    transition: margin-left 0.3s ease-in-out;
 }
 
 /* Desktop Layout */
 @media (min-width: 769px) {
-  .sidebar-container {
-    position: relative;
-    transform: translateX(0);
-    top: 0;
-  }
+    .sidebar-container {
+        position: relative;
+        transform: translateX(0);
+        top: 0;
+    }
 
-  .chat-area {
-    margin-left: 0;
-  }
+    .chat-area {
+        margin-left: 0;
+    }
 
-  .mobile-overlay {
-    display: none !important;
-  }
+    .mobile-overlay {
+        display: none !important;
+    }
 }
 
 /* Mobile Layout */
 @media (max-width: 768px) {
-  .main-content {
-    padding-top: var(--mobile-header-height);
-  }
+    .main-content {
+        padding-top: var(--mobile-header-height);
+    }
 
-  .sidebar-container {
-    top: var(--mobile-header-height);
-    width: 85%;
-    max-width: 320px;
-  }
+    .sidebar-container {
+        top: var(--mobile-header-height);
+        width: 85%;
+        max-width: 320px;
+    }
 }
 
 /* Fix Bootstrap container padding issues */
 .container-fluid {
-  padding: 0 !important;
-  margin: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
 }
 
 /* Utility Classes */
 .visually-hidden {
-  position: absolute !important;
-  width: 1px !important;
-  height: 1px !important;
-  padding: 0 !important;
-  margin: -1px !important;
-  overflow: hidden !important;
-  clip: rect(0, 0, 0, 0) !important;
-  white-space: nowrap !important;
-  border: 0 !important;
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
 }
 
 /* Global Animations */
 @keyframes fadeInDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 @keyframes pulse {
-  0% {
-    transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4);
-  }
-  50% {
-    transform: scale(1.05);
-    box-shadow: 0 0 0 8px rgba(220, 53, 69, 0.1);
-  }
-  100% {
-    transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(220, 53, 69, 0);
-  }
+    0% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4);
+    }
+    50% {
+        transform: scale(1.05);
+        box-shadow: 0 0 0 8px rgba(220, 53, 69, 0.1);
+    }
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(220, 53, 69, 0);
+    }
 }

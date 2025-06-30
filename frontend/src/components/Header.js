@@ -3,17 +3,17 @@ import '../styles/components/Header.css';
 
 // Header component with navigation and controls
 function Header({
-    onToggleSidebar,
-    selectedModel,
-    setSelectedModel,
-    chatMode,
-    setChatMode,
-    showMobileMenu,
-    setShowMobileMenu,
-    onLogout,
-    models,
-    chatModes
-}) {
+                    onToggleSidebar,
+                    selectedModel,
+                    setSelectedModel,
+                    chatMode,
+                    setChatMode,
+                    showMobileMenu,
+                    setShowMobileMenu,
+                    onLogout,
+                    models,
+                    chatModes
+                }) {
     return (
         <div className="app-header">
             {/* Sidebar toggle button */}

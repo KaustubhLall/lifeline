@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { fetchWithAuth, API_BASE } from '../utils/apiUtils';
+import {useCallback, useEffect, useState} from 'react';
+import {API_BASE, fetchWithAuth} from '../utils/apiUtils';
 
 export function useConversations(authenticated, onLogout) {
     const [conversations, setConversations] = useState([]);
@@ -36,7 +36,7 @@ export function useConversations(authenticated, onLogout) {
     // Load messages whenever the active conversation changes
     useEffect(() => {
         if (!authenticated || !currentId) {
-            console.log('Skipping message fetch:', { authenticated, currentId });
+            console.log('Skipping message fetch:', {authenticated, currentId});
             return;
         }
 

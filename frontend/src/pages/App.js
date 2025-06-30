@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, {useState} from 'react';
 import '../styles/App.css';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import Login from '../components/Login';
@@ -8,10 +8,10 @@ import ErrorToast from '../components/ErrorToast';
 import ChatSidebar from '../components/ChatSidebar';
 import ChatWindow from '../components/ChatWindow';
 import ChatInput from '../components/ChatInput';
-import { useAuth } from '../hooks/useAuth';
-import { useConversations } from '../hooks/useConversations';
-import { useSpeechToText } from '../hooks/useSpeechToText';
-import { useMobileLayout } from '../hooks/useMobileLayout';
+import {useAuth} from '../hooks/useAuth';
+import {useConversations} from '../hooks/useConversations';
+import {useSpeechToText} from '../hooks/useSpeechToText';
+import {useMobileLayout} from '../hooks/useMobileLayout';
 
 function App() {
     const [showSignup, setShowSignup] = useState(false);
@@ -20,7 +20,7 @@ function App() {
     const [chatMode, setChatMode] = useState('conversational');
 
     // Authentication and user info
-    const { authenticated, userId, username, handleLogin, handleLogout } = useAuth();
+    const {authenticated, userId, username, handleLogin, handleLogout} = useAuth();
 
     // Responsive layout controls
     const {

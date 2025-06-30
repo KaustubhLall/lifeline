@@ -13,9 +13,9 @@ export function isSTTSupported() {
 
     // Check if we're in a secure context (HTTPS or localhost)
     const isSecureContext = window.isSecureContext === true ||
-                           window.location.protocol === 'https:' ||
-                           window.location.hostname === 'localhost' ||
-                           window.location.hostname === '127.0.0.1';
+        window.location.protocol === 'https:' ||
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1';
 
     // For local network IPs, check if protocol is secure
     const isLocalNetworkIP = window.location.hostname.match(/^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/);
