@@ -234,7 +234,7 @@ class MessageListCreateView(APIView):
                 user=request.user,
                 query=user_message,
                 limit=5,  # Increased from 3 for better context
-                min_similarity=0.6  # Lower threshold for more inclusive results
+                min_similarity=0.3  # FIXED: Lowered from 0.6 to 0.3 for better recall
             )
 
             # Get conversation-specific memories
@@ -316,13 +316,15 @@ class MessageListCreateView(APIView):
             memory_thread.daemon = True
             memory_thread.start()
 
-            # Prepare debug information
+            # Prepare debug information BEFORE creating debug entry
             system_prompt = get_system_prompt(mode)
             memory_context = generate_memory_context(all_memories)
             from ..utils.prompts import format_conversation_history
             conversation_history_text = format_conversation_history(message_history, 10000)
 
-            # Initialize debug entry
+            logger.info(f"[DEBUG PREP] System prompt length: {len(system_prompt)}, Memory context length: {len(memory_context)}, History length: {len(conversation_history_text)}")
+
+            # Initialize debug entry with actual data
             debug_entry = PromptDebug.objects.create(
                 user_message=user_msg,
                 conversation=conversation,
@@ -339,6 +341,8 @@ class MessageListCreateView(APIView):
                 conversation_memories_count=len(conversation_memories),
                 history_messages_count=len(message_history)
             )
+
+            logger.info(f"[DEBUG ENTRY] Created debug entry {debug_entry.id} with system_prompt: {len(debug_entry.system_prompt)} chars, memory_context: {len(debug_entry.memory_context)} chars, conversation_history: {len(debug_entry.conversation_history)} chars")
 
             try:
                 logger.info(f"[LLM CALL] Calling LLM with model={model}, prompt_length={len(enhanced_prompt)}")

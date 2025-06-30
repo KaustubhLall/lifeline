@@ -76,8 +76,8 @@ class ConversationAdmin(admin.ModelAdmin):
         if obj.context:
             import json
             formatted_context = json.dumps(obj.context, indent=2)
-            return format_html('<pre style="background-color: #f8f9fa; padding: 10px; border-radius: 4px;">{}</pre>', formatted_context)
-        return "No context data"
+            return format_html('<pre style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; color: #495057; border: 1px solid #dee2e6; font-size: 13px;">{}</pre>', formatted_context)
+        return '<span style="color: #6c757d; font-style: italic;">No context data</span>'
     context_display.short_description = "Context JSON"
 
 
@@ -125,27 +125,27 @@ class MessageAdmin(admin.ModelAdmin):
     has_full_prompt.short_description = "Full Prompt"
 
     def content_display(self, obj):
-        return format_html('<div style="background-color: #f8f9fa; padding: 10px; border-radius: 4px; white-space: pre-wrap;">{}</div>', obj.content)
+        return format_html('<div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; white-space: pre-wrap; color: #212529; border: 1px solid #dee2e6; font-family: monospace; font-size: 14px;">{}</div>', obj.content)
     content_display.short_description = "Full Content"
 
     def raw_user_input_display(self, obj):
         if obj.raw_user_input:
-            return format_html('<div style="background-color: #e3f2fd; padding: 10px; border-radius: 4px; white-space: pre-wrap;">{}</div>', obj.raw_user_input)
-        return "No raw user input (this is a bot message)"
+            return format_html('<div style="background-color: #e3f2fd; padding: 15px; border-radius: 4px; white-space: pre-wrap; color: #1565c0; border: 1px solid #90caf9; font-family: monospace; font-size: 14px;"><strong style="color: #0d47a1;">Original User Input:</strong><br><br>{}</div>', obj.raw_user_input)
+        return '<span style="color: #6c757d; font-style: italic;">No raw user input (this is a bot message)</span>'
     raw_user_input_display.short_description = "Original User Input"
 
     def full_prompt_display(self, obj):
         if obj.full_prompt:
-            return format_html('<div style="background-color: #fff3e0; padding: 10px; border-radius: 4px; white-space: pre-wrap; max-height: 600px; overflow-y: auto; font-family: monospace; font-size: 12px;"><strong>Complete Prompt Sent to LLM ({} characters):</strong><br><br>{}</div>', len(obj.full_prompt), obj.full_prompt)
-        return "No full prompt (this is a bot response message)"
+            return format_html('<div style="background-color: #fff3e0; padding: 15px; border-radius: 4px; white-space: pre-wrap; max-height: 600px; overflow-y: auto; font-family: monospace; font-size: 12px; color: #e65100; border: 1px solid #ffcc02;"><strong style="color: #bf360c;">Complete Prompt Sent to LLM ({} characters):</strong><br><br><span style="color: #ef6c00;">{}</span></div>', len(obj.full_prompt), obj.full_prompt)
+        return '<span style="color: #6c757d; font-style: italic;">No full prompt (this is a bot response message)</span>'
     full_prompt_display.short_description = "Complete LLM Prompt"
 
     def metadata_display(self, obj):
         if obj.metadata:
             import json
             formatted_metadata = json.dumps(obj.metadata, indent=2)
-            return format_html('<pre style="background-color: #f8f9fa; padding: 10px; border-radius: 4px;">{}</pre>', formatted_metadata)
-        return "No metadata"
+            return format_html('<pre style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; color: #495057; border: 1px solid #dee2e6; font-size: 13px;">{}</pre>', formatted_metadata)
+        return '<span style="color: #6c757d; font-style: italic;">No metadata</span>'
     metadata_display.short_description = "Metadata JSON"
 
     def debug_entries(self, obj):
@@ -154,9 +154,9 @@ class MessageAdmin(admin.ModelAdmin):
             links = []
             for entry in debug_entries:
                 url = reverse('admin:api_promptdebug_change', args=[entry.id])
-                links.append(f'<a href="{url}">Debug Entry {entry.id}</a>')
+                links.append(f'<a href="{url}" style="color: #007bff; text-decoration: none;">Debug Entry {entry.id}</a>')
             return format_html('<br>'.join(links))
-        return "No debug entries"
+        return '<span style="color: #6c757d; font-style: italic;">No debug entries</span>'
     debug_entries.short_description = "Debug Entries"
 
 
@@ -213,31 +213,31 @@ class PromptDebugAdmin(admin.ModelAdmin):
     user_message_preview.short_description = "User Message"
 
     def full_prompt_display(self, obj):
-        return format_html('<div style="background-color: #f8f9fa; padding: 10px; border-radius: 4px; white-space: pre-wrap; max-height: 500px; overflow-y: auto;">{}</div>', obj.full_prompt)
+        return format_html('<div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; white-space: pre-wrap; max-height: 500px; overflow-y: auto; color: #212529; border: 1px solid #dee2e6; font-family: monospace; font-size: 12px;"><strong style="color: #495057;">Complete Prompt Sent to LLM ({} characters):</strong><br><br><span style="color: #343a40;">{}</span></div>', len(obj.full_prompt), obj.full_prompt)
     full_prompt_display.short_description = "Complete Prompt Sent to LLM"
 
     def system_prompt_display(self, obj):
         if obj.system_prompt:
-            return format_html('<div style="background-color: #e3f2fd; padding: 10px; border-radius: 4px; white-space: pre-wrap;">{}</div>', obj.system_prompt)
-        return "No system prompt"
+            return format_html('<div style="background-color: #e3f2fd; padding: 15px; border-radius: 4px; white-space: pre-wrap; color: #1565c0; border: 1px solid #90caf9; font-family: monospace; font-size: 13px;"><strong style="color: #0d47a1;">System Prompt:</strong><br><br><span style="color: #1976d2;">{}</span></div>', obj.system_prompt)
+        return '<span style="color: #6c757d; font-style: italic;">No system prompt</span>'
     system_prompt_display.short_description = "System Prompt"
 
     def memory_context_display(self, obj):
         if obj.memory_context:
-            return format_html('<div style="background-color: #f3e5f5; padding: 10px; border-radius: 4px; white-space: pre-wrap;">{}</div>', obj.memory_context)
-        return "No memory context"
+            return format_html('<div style="background-color: #f3e5f5; padding: 15px; border-radius: 4px; white-space: pre-wrap; color: #7b1fa2; border: 1px solid #ce93d8; font-family: monospace; font-size: 13px;"><strong style="color: #4a148c;">Memory Context:</strong><br><br><span style="color: #8e24aa;">{}</span></div>', obj.memory_context)
+        return '<span style="color: #6c757d; font-style: italic;">No memory context</span>'
     memory_context_display.short_description = "Memory Context"
 
     def conversation_history_display(self, obj):
         if obj.conversation_history:
-            return format_html('<div style="background-color: #e8f5e8; padding: 10px; border-radius: 4px; white-space: pre-wrap; max-height: 400px; overflow-y: auto;">{}</div>', obj.conversation_history)
-        return "No conversation history"
+            return format_html('<div style="background-color: #e8f5e8; padding: 15px; border-radius: 4px; white-space: pre-wrap; max-height: 400px; overflow-y: auto; color: #2e7d32; border: 1px solid #a5d6a7; font-family: monospace; font-size: 13px;"><strong style="color: #1b5e20;">Conversation History:</strong><br><br><span style="color: #388e3c;">{}</span></div>', obj.conversation_history)
+        return '<span style="color: #6c757d; font-style: italic;">No conversation history</span>'
     conversation_history_display.short_description = "Conversation History"
 
     def api_error_display(self, obj):
         if obj.api_error:
-            return format_html('<div style="background-color: #ffebee; padding: 10px; border-radius: 4px; white-space: pre-wrap; color: #c62828;">{}</div>', obj.api_error)
-        return "No errors"
+            return format_html('<div style="background-color: #ffebee; padding: 15px; border-radius: 4px; white-space: pre-wrap; color: #c62828; border: 1px solid #ef9a9a; font-family: monospace; font-size: 13px;"><strong style="color: #b71c1c;">API Error:</strong><br><br><span style="color: #d32f2f;">{}</span></div>', obj.api_error)
+        return '<span style="color: #6c757d; font-style: italic;">No errors</span>'
     api_error_display.short_description = "API Error"
 
 
@@ -274,7 +274,7 @@ class MemoryAdmin(admin.ModelAdmin):
     )
 
     def content_display(self, obj):
-        return format_html('<div style="background-color: #f8f9fa; padding: 10px; border-radius: 4px; white-space: pre-wrap;">{}</div>', obj.content)
+        return format_html('<div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; white-space: pre-wrap; color: #495057; border: 1px solid #dee2e6; font-family: monospace; font-size: 14px;">{}</div>', obj.content)
     content_display.short_description = "Memory Content"
 
     def embedding_info(self, obj):
@@ -287,8 +287,8 @@ class MemoryAdmin(admin.ModelAdmin):
         if obj.metadata:
             import json
             formatted_metadata = json.dumps(obj.metadata, indent=2)
-            return format_html('<pre style="background-color: #f8f9fa; padding: 10px; border-radius: 4px;">{}</pre>', formatted_metadata)
-        return "No metadata"
+            return format_html('<pre style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; color: #495057; border: 1px solid #dee2e6; font-size: 13px;">{}</pre>', formatted_metadata)
+        return '<span style="color: #6c757d; font-style: italic;">No metadata</span>'
     metadata_display.short_description = "Metadata JSON"
 
 
