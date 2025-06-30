@@ -221,7 +221,7 @@ def call_llm_TTS(text: str, model: str = "tts-1", voice: str = "alloy") -> Optio
         raise AudioProcessingError(f"Failed to convert text to speech: {e}")
 
 
-def call_llm_embedding(text: str, model: str = "text-embedding-ada-002") -> list:
+def call_llm_embedding(text: str, model: str = "text-embedding-3-small") -> list:
     """
     Generate embeddings for text using OpenAI's embedding API.
 
