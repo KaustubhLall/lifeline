@@ -19,7 +19,7 @@ jobs:
       with:
         node-version: '18'
         cache: 'npm'
-        cache-dependency-path: frontend/package-lock.json
+        cache-dependency-path: frontend/package.json
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -81,7 +81,7 @@ jobs:
         echo "Starting deployment process..."
         
         # Configuration
-        APP_DIR="/home/ubuntu/lifeline"
+        APP_DIR="/home/ec2-user/lifeline"
         BACKEND_DIR="$APP_DIR/backend/LifeLine"
         FRONTEND_DIR="$APP_DIR/frontend"
         VENV_DIR="$APP_DIR/venv"
@@ -104,7 +104,7 @@ jobs:
         # Move new deployment
         echo "Installing new deployment..."
         sudo mv /tmp/lifeline-deployment $APP_DIR/current
-        sudo chown -R ubuntu:ubuntu $APP_DIR/current
+        sudo chown -R ec2-user:ec2-user $APP_DIR/current
         
         # Set up Python virtual environment
         echo "Setting up Python virtual environment..."
@@ -130,7 +130,7 @@ jobs:
         sudo rm -rf /var/www/html/lifeline
         sudo mkdir -p /var/www/html/lifeline
         sudo cp -r $APP_DIR/current/frontend/* /var/www/html/lifeline/
-        sudo chown -R www-data:www-data /var/www/html/lifeline
+        sudo chown -R nginx:nginx /var/www/html/lifeline
         
         # Create systemd service for backend
         echo "Creating systemd service..."
@@ -141,14 +141,14 @@ jobs:
         
         [Service]
         Type=exec
-        User=ubuntu
-        Group=ubuntu
-        WorkingDirectory=/home/ubuntu/lifeline/current/backend/LifeLine
-        Environment=PATH=/home/ubuntu/lifeline/venv/bin
+        User=ec2-user
+        Group=ec2-user
+        WorkingDirectory=/home/ec2-user/lifeline/current/backend/LifeLine
+        Environment=PATH=/home/ec2-user/lifeline/venv/bin
         Environment=DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
         Environment=OPENAI_API_KEY=${OPENAI_API_KEY}
         Environment=DEBUG=False
-        ExecStart=/home/ubuntu/lifeline/venv/bin/python manage.py runserver 0.0.0.0:8000
+        ExecStart=/home/ec2-user/lifeline/venv/bin/python manage.py runserver 0.0.0.0:8000
         Restart=always
         RestartSec=3
         
@@ -158,7 +158,7 @@ jobs:
         
         # Configure Nginx
         echo "Configuring Nginx..."
-        sudo tee /etc/nginx/sites-available/lifeline > /dev/null << 'NGINX_EOF'
+        sudo tee /etc/nginx/sites-available/lifeline > /dev/null << 'NGINX_EOF' || sudo tee /etc/nginx/conf.d/lifeline.conf > /dev/null << 'NGINX_EOF'
         server {
             listen 80;
             server_name 54.144.219.238;
@@ -195,16 +195,18 @@ jobs:
             
             # Static files
             location /static/ {
-                alias /home/ubuntu/lifeline/current/backend/LifeLine/staticfiles/;
+                alias /home/ec2-user/lifeline/current/backend/LifeLine/staticfiles/;
                 expires 1y;
                 add_header Cache-Control "public, immutable";
             }
         }
         NGINX_EOF
         
-        # Enable nginx site
-        sudo ln -sf /etc/nginx/sites-available/lifeline /etc/nginx/sites-enabled/
-        sudo rm -f /etc/nginx/sites-enabled/default
+        # Enable nginx site (handle both Debian/Ubuntu and RHEL/Amazon Linux)
+        if [ -d "/etc/nginx/sites-available" ]; then
+            sudo ln -sf /etc/nginx/sites-available/lifeline /etc/nginx/sites-enabled/
+            sudo rm -f /etc/nginx/sites-enabled/default
+        fi
         
         # Test nginx configuration
         sudo nginx -t
@@ -242,21 +244,6 @@ jobs:
         EOF
         
         chmod +x deployment/deploy.sh
-        
-        # Create health check endpoint script
-        cat > deployment/health_check.py << 'EOF'
-        # Add this to your Django urls.py and views
-        from django.http import JsonResponse
-        from django.views.decorators.http import require_http_methods
-        
-        @require_http_methods(["GET"])
-        def health_check(request):
-            return JsonResponse({
-                "status": "healthy",
-                "timestamp": timezone.now().isoformat(),
-                "version": "1.0.0"
-            })
-        EOF
         
         echo "Deployment package prepared"
         ls -la deployment/
@@ -296,7 +283,7 @@ jobs:
       env:
         HOSTNAME: ${{ secrets.EC2_HOSTNAME }}
       run: |
-        echo "Verifying deployment..."W
+        echo "Verifying deployment..."
         
         # Wait for services to start
         sleep 10
