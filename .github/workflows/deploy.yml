@@ -146,28 +146,28 @@ jobs:
         
         # Create systemd service
         echo "🔧 Creating backend service..."
-        sudo tee /etc/systemd/system/lifeline-backend.service > /dev/null << 'SYSTEMD_EOF'
-        [Unit]
-        Description=LifeLine Django Backend
-        After=network.target
-        
-        [Service]
-        Type=exec
-        User=ec2-user
-        Group=ec2-user
-        WorkingDirectory=/home/ec2-user/lifeline/current/backend/LifeLine
-        Environment=PATH=/home/ec2-user/lifeline/venv/bin
-        Environment=DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
-        Environment=OPENAI_API_KEY=${OPENAI_API_KEY}
-        Environment=DEBUG=False
-        Environment=ALLOWED_HOSTS=*
-        ExecStart=/home/ec2-user/lifeline/venv/bin/python manage.py runserver 0.0.0.0:8000
-        Restart=always
-        RestartSec=3
-        
-        [Install]
-        WantedBy=multi-user.target
-        SYSTEMD_EOF
+        sudo tee /etc/systemd/system/lifeline-backend.service > /dev/null << SYSTEMD_EOF
+[Unit]
+Description=LifeLine Django Backend
+After=network.target
+
+[Service]
+Type=exec
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/home/ec2-user/lifeline/current/backend/LifeLine
+Environment=PATH=/home/ec2-user/lifeline/venv/bin
+Environment=DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
+Environment=OPENAI_API_KEY=${OPENAI_API_KEY}
+Environment=DEBUG=False
+Environment=ALLOWED_HOSTS=*
+ExecStart=/home/ec2-user/lifeline/venv/bin/python manage.py runserver 0.0.0.0:8000
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+SYSTEMD_EOF
         
         # Configure Nginx
         echo "🔧 Configuring Nginx..."
