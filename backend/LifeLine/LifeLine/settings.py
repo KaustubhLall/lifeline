@@ -26,7 +26,7 @@ if not SECRET_KEY:
     raise ValueError("The SECRET_KEY environment variable is not set. Please set it for production.")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
 # Host configuration for development and production
 ALLOWED_HOSTS = [
@@ -38,9 +38,13 @@ ALLOWED_HOSTS = [
     # Add EC2 compatibility
     '*.compute.amazonaws.com',
     '*.amazonaws.com',
-    # Allow any host in development (remove in production)
-    '*'
+    # Production - get from environment or allow all for now
+    '*' if DEBUG else os.getenv('ALLOWED_HOSTS', '*').split(',')
 ]
+
+# Flatten ALLOWED_HOSTS if it's a nested list
+if isinstance(ALLOWED_HOSTS[-1], list):
+    ALLOWED_HOSTS = [host for sublist in ALLOWED_HOSTS for host in (sublist if isinstance(sublist, list) else [sublist])]
 
 # Application definition
 
@@ -56,6 +60,9 @@ INSTALLED_APPS = [
     'corsheaders',
     'api',
 ]
+
+# Custom user model - must be set before Django apps are loaded
+AUTH_USER_MODEL = 'api.User'
 
 # Add CORS middleware at the beginning
 MIDDLEWARE = [
@@ -220,6 +227,3 @@ SIMPLE_JWT = {
 }
 
 APPEND_SLASH = True
-
-# Custom user model
-AUTH_USER_MODEL = 'api.User'

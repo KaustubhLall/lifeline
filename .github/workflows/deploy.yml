@@ -189,46 +189,49 @@ jobs:
         ExecStart=/home/ec2-user/lifeline/venv/bin/python manage.py runserver 0.0.0.0:8000
         Restart=always
         RestartSec=3
+        StandardOutput=journal
+        StandardError=journal
         
         [Install]
         WantedBy=multi-user.target
         SYSTEMD_EOF
         
-        # Configure Nginx
-        echo "🔧 Configuring Nginx..."
-        sudo tee /etc/nginx/conf.d/lifeline.conf > /dev/null << 'NGINX_EOF'
+        # Configure nginx
+        echo "🌐 Configuring nginx..."
+        sudo tee /etc/nginx/conf.d/lifeline.conf > /dev/null << NGINX_EOF
         server {
             listen 80;
             server_name _;
+            client_max_body_size 100M;
             
-            # Frontend
+            # Serve frontend files
             location / {
                 root /var/www/html/lifeline;
+                try_files \$uri \$uri/ /index.html;
                 index index.html;
-                try_files $uri $uri/ /index.html;
             }
             
-            # Backend API
+            # API routes
             location /api/ {
                 proxy_pass http://127.0.0.1:8000;
                 proxy_http_version 1.1;
-                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Upgrade \$http_upgrade;
                 proxy_set_header Connection 'upgrade';
-                proxy_set_header Host $host;
-                proxy_set_header X-Real-IP $remote_addr;
-                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                proxy_set_header X-Forwarded-Proto $scheme;
-                proxy_cache_bypass $http_upgrade;
+                proxy_set_header Host \$host;
+                proxy_set_header X-Real-IP \$remote_addr;
+                proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto \$scheme;
+                proxy_cache_bypass \$http_upgrade;
             }
             
             # Django admin
             location /admin/ {
                 proxy_pass http://127.0.0.1:8000;
                 proxy_http_version 1.1;
-                proxy_set_header Host $host;
-                proxy_set_header X-Real-IP $remote_addr;
-                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_set_header Host \$host;
+                proxy_set_header X-Real-IP \$remote_addr;
+                proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto \$scheme;
             }
             
             # Static files
@@ -246,33 +249,45 @@ jobs:
         # Test nginx configuration
         sudo nginx -t
         
-        # Start services
+        # Start services in correct order
         echo "🚀 Starting services..."
         sudo systemctl daemon-reload
+        
+        # Stop services if running
+        sudo systemctl stop lifeline-backend || true
+        sudo systemctl stop nginx || true
+        
+        # Enable and start backend service
         sudo systemctl enable lifeline-backend
         sudo systemctl start lifeline-backend
+        
+        # Wait for backend to start
+        echo "⏳ Waiting for backend to start..."
+        sleep 10
+        
+        # Check backend status
+        if ! sudo systemctl is-active --quiet lifeline-backend; then
+            echo "❌ Backend service failed to start"
+            sudo systemctl status lifeline-backend
+            sudo journalctl -u lifeline-backend --lines=20
+            exit 1
+        fi
+        
+        # Start nginx
         sudo systemctl enable nginx
         sudo systemctl start nginx
         
-        # Health check
-        echo "🔍 Performing health check..."
-        sleep 10
-        
-        # Check services
-        if sudo systemctl is-active --quiet lifeline-backend; then
-            echo "✅ Backend service is running"
-        else
-            echo "❌ Backend service failed to start"
-            sudo systemctl status lifeline-backend
-            sudo journalctl -u lifeline-backend --no-pager -n 20
-        fi
-        
-        if sudo systemctl is-active --quiet nginx; then
-            echo "✅ Nginx is running"
-        else
-            echo "❌ Nginx failed to start"
+        # Check nginx status
+        if ! sudo systemctl is-active --quiet nginx; then
+            echo "❌ Nginx service failed to start"
             sudo systemctl status nginx
+            sudo nginx -t
+            exit 1
         fi
+        
+        # Verify services are running
+        echo "✅ Backend service status: $(sudo systemctl is-active lifeline-backend)"
+        echo "✅ Nginx service status: $(sudo systemctl is-active nginx)"
         
         echo "🎉 Deployment completed!"
         EOF
