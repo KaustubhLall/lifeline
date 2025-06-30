@@ -75,7 +75,11 @@ jobs:
         PYTHONPATH: .
       run: |
         echo "Running Django tests..."
-        python manage.py test api --verbosity=2 || echo "Tests failed but continuing deployment"
+        # Set Django settings module explicitly
+        export DJANGO_SETTINGS_MODULE=LifeLine.settings
+        
+        # Run tests with specific app pattern to avoid import path conflicts
+        python manage.py test api.tests --verbosity=2 --keepdb || echo "Tests failed but continuing deployment"
 
     - name: Prepare deployment package
       run: |
