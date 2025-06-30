@@ -4,240 +4,74 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch:
-    inputs:
-      confirm_deploy:
-        description: 'Type "deploy" to confirm deployment'
-        required: true
-        default: ''
-        type: string
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    # Only run if manual trigger confirms deployment or it's a push to main
-    if: github.event_name == 'push' || github.event.inputs.confirm_deploy == 'deploy'
-
+    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        ref: main  # Always deploy from main branch
-
-    - name: Set up Node.js
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: frontend/package-lock.json
-
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
-
-    - name: Cache Python dependencies
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
-
-    - name: Install frontend dependencies
-      working-directory: ./frontend
-      run: |
-        echo "Installing frontend dependencies..."
-        npm ci
-        echo "Frontend dependencies installed"
-
+        
     - name: Build frontend
       working-directory: ./frontend
       run: |
-        echo "Building React frontend..."
+        npm ci
         npm run build
-        echo "Frontend build completed"
-        ls -la build/
-
-    - name: Install backend dependencies
-      working-directory: ./backend
-      run: |
-        echo "Installing Python dependencies..."
-        pip install -r requirements.txt
-        echo "Backend dependencies installed"
-
-    - name: Run backend tests
-      working-directory: ./backend/LifeLine
+        
+    - name: Deploy to EC2
       env:
+        PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+        HOSTNAME: ${{ secrets.EC2_HOSTNAME }}
+        USER_NAME: ${{ secrets.EC2_USER_NAME }}
         DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        DEBUG: False
-        PYTHONPATH: .
       run: |
-        echo "Running Django tests..."
-        # Set Django settings module explicitly
-        export DJANGO_SETTINGS_MODULE=LifeLine.settings
+        echo "$PRIVATE_KEY" > private_key
+        chmod 600 private_key
         
-        # Run tests with specific app pattern to avoid import path conflicts
-        python manage.py test api.tests --verbosity=2 --keepdb || echo "Tests failed but continuing deployment"
-
-    - name: Prepare deployment package
-      run: |
-        echo "Preparing deployment package..."
-        mkdir -p deployment
+        # Stop services and clean up
+        ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} 'sudo systemctl stop lifeline-backend || true; sudo systemctl stop nginx || true; sudo rm -rf /home/ec2-user/lifeline; mkdir -p /home/ec2-user/lifeline'
         
-        # Copy built frontend
-        cp -r frontend/build deployment/frontend
+        # Copy files
+        scp -i private_key -r frontend/build ${USER_NAME}@${HOSTNAME}:/home/ec2-user/lifeline/frontend
+        scp -i private_key -r backend ${USER_NAME}@${HOSTNAME}:/home/ec2-user/lifeline/backend
         
-        # Copy backend files
-        cp -r backend deployment/backend
-        
-        # Create deployment script
-        cat > deployment/deploy.sh << 'EOF'
-        #!/bin/bash
-        set -e
-        
-        echo "🚀 Starting LifeLine deployment..."
-        
-        # Configuration
-        APP_DIR="/home/ec2-user/lifeline"
-        VENV_DIR="$APP_DIR/venv"
-        
-        # Update system packages
-        echo "📦 Updating system packages..."
-        sudo yum update -y
-        sudo yum install -y python3 python3-pip nginx git
-        
-        # Create application directory
-        sudo mkdir -p $APP_DIR
-        cd $APP_DIR
-        
-        echo "🛑 Stopping existing services..."
-        sudo systemctl stop lifeline-backend 2>/dev/null || echo "Backend service not running"
-        sudo systemctl stop nginx 2>/dev/null || echo "Nginx not running"
-        
-        # Backup current deployment
-        if [ -d "$APP_DIR/current" ]; then
-            echo "📋 Creating backup..."
-            sudo mv $APP_DIR/current $APP_DIR/backup-$(date +%Y%m%d_%H%M%S)
-        fi
-        
-        # Install new deployment
-        echo "📁 Installing new deployment..."
-        sudo mv /tmp/lifeline-deployment $APP_DIR/current
-        sudo chown -R ec2-user:ec2-user $APP_DIR/current
-        
-        # Set up Python virtual environment
-        echo "🐍 Setting up Python environment..."
-        cd $APP_DIR/current/backend
-        
-        # Remove old venv if it exists to ensure clean install
-        rm -rf $VENV_DIR
-        
-        python3 -m venv $VENV_DIR
-        source $VENV_DIR/bin/activate
-        pip install --upgrade pip
-        
-        echo "📦 Installing Python packages..."
-        pip install -r requirements.txt
-        
-        # Verify gunicorn installation
-        echo "🔍 Verifying gunicorn installation..."
-        if [ -f "$VENV_DIR/bin/gunicorn" ]; then
-            echo "✅ Gunicorn found at $VENV_DIR/bin/gunicorn"
-        else
-            echo "❌ Gunicorn not found, forcing installation..."
-            pip install gunicorn
-        fi
-        
-        # List installed packages for debugging
-        echo "📋 Installed packages:"
-        pip list | grep -E "(django|gunicorn)" || echo "Key packages not found"
+        # Install and configure
+        ssh -i private_key ${USER_NAME}@${HOSTNAME} 'cd /home/ec2-user/lifeline && python3 -m venv venv && source venv/bin/activate && pip install -r backend/requirements.txt && pip install gunicorn'
         
         # Django setup
-        echo "⚙️ Configuring Django..."
-        cd $APP_DIR/current/backend/LifeLine
-        source $VENV_DIR/bin/activate
-        
-        # Ensure environment variables are available for Django
-        export DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY}"
-        export OPENAI_API_KEY="${OPENAI_API_KEY}"
-        export DEBUG=False
-        export ALLOWED_HOSTS="*"
-        
-        # Verify environment variables are set
-        echo "Verifying environment variables..."
-        if [ -z "$DJANGO_SECRET_KEY" ]; then
-            echo "❌ DJANGO_SECRET_KEY is not set"
-            exit 1
-        fi
-        if [ -z "$OPENAI_API_KEY" ]; then
-            echo "❌ OPENAI_API_KEY is not set"
-            exit 1
-        fi
-        echo "✅ Environment variables verified"
-        
-        # Apply migrations
-        echo "📋 Applying migrations..."
-        DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY}" OPENAI_API_KEY="${OPENAI_API_KEY}" python manage.py migrate --noinput
-        
-        # Collect static files
-        echo "📁 Collecting static files..."
-        DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY}" OPENAI_API_KEY="${OPENAI_API_KEY}" python manage.py collectstatic --noinput --clear
-        
-        # Set up frontend
-        echo "🌐 Setting up frontend..."
-        sudo rm -rf /var/www/html/lifeline
-        sudo mkdir -p /var/www/html/lifeline
-        sudo cp -r $APP_DIR/current/frontend/* /var/www/html/lifeline/
-        sudo chown -R nginx:nginx /var/www/html/lifeline
-        
-        # Create environment file for systemd
-        echo "🔒 Creating environment file for backend service..."
-        sudo tee /etc/lifeline.env > /dev/null << EOF
-        DJANGO_SECRET_KEY='${DJANGO_SECRET_KEY}'
-        OPENAI_API_KEY='${OPENAI_API_KEY}'
-        DEBUG=False
-        ALLOWED_HOSTS='*'
-        EOF
+        ssh -i private_key ${USER_NAME}@${HOSTNAME} 'cd /home/ec2-user/lifeline/backend/LifeLine && source /home/ec2-user/lifeline/venv/bin/activate && DJANGO_SECRET_KEY='"'"'${{ secrets.DJANGO_SECRET_KEY }}'"'"' OPENAI_API_KEY='"'"'${{ secrets.OPENAI_API_KEY }}'"'"' python manage.py migrate && DJANGO_SECRET_KEY='"'"'${{ secrets.DJANGO_SECRET_KEY }}'"'"' OPENAI_API_KEY='"'"'${{ secrets.OPENAI_API_KEY }}'"'"' python manage.py collectstatic --noinput'
         
         # Create systemd service
-        echo "🔧 Creating backend service..."
-        sudo tee /etc/systemd/system/lifeline-backend.service > /dev/null << SYSTEMD_EOF
-        [Unit]
+        ssh -i private_key ${USER_NAME}@${HOSTNAME} 'echo "[Unit]
         Description=LifeLine Django Backend
         After=network.target
         
         [Service]
         Type=simple
         User=ec2-user
-        Group=ec2-user
-        WorkingDirectory=/home/ec2-user/lifeline/current/backend/LifeLine
-        Environment=DJANGO_SECRET_KEY='${DJANGO_SECRET_KEY}'
-        Environment=OPENAI_API_KEY='${OPENAI_API_KEY}'
-        Environment=DEBUG=False
-        Environment=ALLOWED_HOSTS='*'
-        ExecStart=/home/ec2-user/lifeline/venv/bin/gunicorn LifeLine.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 60
+        WorkingDirectory=/home/ec2-user/lifeline/backend/LifeLine
+        Environment=DJANGO_SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}
+        Environment=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+        ExecStart=/home/ec2-user/lifeline/venv/bin/gunicorn LifeLine.wsgi:application --bind 0.0.0.0:8000
         Restart=always
-        RestartSec=3
-        StandardOutput=journal
-        StandardError=journal
         
         [Install]
-        WantedBy=multi-user.target
-        SYSTEMD_EOF
+        WantedBy=multi-user.target" | sudo tee /etc/systemd/system/lifeline-backend.service'
         
-        # Configure nginx
-        echo "🌐 Configuring nginx..."
-        sudo tee /etc/nginx/conf.d/lifeline.conf > /dev/null << NGINX_EOF
-        server {
-            listen 80 default_server;
+        # Create nginx config
+        ssh -i private_key ${USER_NAME}@${HOSTNAME} 'echo "server {
+            listen 80;
             server_name _;
-            client_max_body_size 100M;
             
-            root /var/www/html/lifeline;
+            root /home/ec2-user/lifeline/frontend;
             index index.html;
-
+            
             location / {
                 try_files \$uri \$uri/ /index.html;
             }
@@ -246,273 +80,8 @@ jobs:
                 proxy_pass http://127.0.0.1:8000;
                 proxy_set_header Host \$host;
                 proxy_set_header X-Real-IP \$remote_addr;
-                proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                proxy_set_header X-Forwarded-Proto \$scheme;
             }
-            
-            location /admin {
-                proxy_pass http://127.0.0.1:8000;
-                proxy_set_header Host \$host;
-                proxy_set_header X-Real-IP \$remote_addr;
-                proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                proxy_set_header X-Forwarded-Proto \$scheme;
-            }
-            
-            location /static/ {
-                alias /home/ec2-user/lifeline/current/backend/LifeLine/staticfiles/;
-            }
-        }
-        NGINX_EOF
+        }" | sudo tee /etc/nginx/conf.d/lifeline.conf'
         
-        # Remove default nginx config to prevent conflicts
-        sudo rm -f /etc/nginx/sites-enabled/default
-        sudo rm -f /etc/nginx/conf.d/default.conf
-        
-        # Test nginx configuration
-        sudo nginx -t
-        
-        # Start services in correct order
-        echo "🚀 Starting services..."
-        sudo systemctl daemon-reload
-        
-        # Stop services if running
-        sudo systemctl stop lifeline-backend || true
-        sudo systemctl stop nginx || true
-        
-        # Enable and start backend service
-        sudo systemctl enable lifeline-backend
-        sudo systemctl start lifeline-backend
-        
-        # Wait for backend to start
-        echo "⏳ Waiting for backend to start..."
-        sleep 10
-        
-        # Check backend status
-        if ! sudo systemctl is-active --quiet lifeline-backend; then
-            echo "❌ Backend service failed to start"
-            echo ""
-            echo "🔍 DETAILED DEBUGGING INFORMATION:"
-            echo "=================================="
-            
-            echo "📋 Service Status:"
-            sudo systemctl status lifeline-backend --no-pager -l || true
-            
-            echo ""
-            echo "📋 Recent Service Logs:"
-            sudo journalctl -u lifeline-backend --no-pager --lines=50 || true
-            
-            echo ""
-            echo "🔍 Environment File Contents:"
-            sudo cat /etc/lifeline.env || echo "Environment file not found"
-            
-            echo ""
-            echo "🔍 Service File Contents:"
-            sudo cat /etc/systemd/system/lifeline-backend.service || echo "Service file not found"
-            
-            echo ""
-            echo "🐍 Virtual Environment Check:"
-            echo "Virtual env exists: $(test -d /home/ec2-user/lifeline/venv && echo 'YES' || echo 'NO')"
-            echo "Gunicorn exists: $(test -f /home/ec2-user/lifeline/venv/bin/gunicorn && echo 'YES' || echo 'NO')"
-            
-            echo ""
-            echo "🔍 Manual Test - Activating venv and checking Django:"
-            cd /home/ec2-user/lifeline/current/backend/LifeLine
-            if source /home/ec2-user/lifeline/venv/bin/activate; then
-                echo "✅ Virtual environment activated successfully"
-                echo "Python path: $(which python)"
-                echo "Gunicorn path: $(which gunicorn)"
-                echo "Django check:"
-                python -c "import django; print('Django version:', django.get_version())" || echo "❌ Django import failed"
-                echo "WSGI module check:"
-                python -c "from LifeLine import wsgi; print('✅ WSGI module loaded successfully')" || echo "❌ WSGI module import failed"
-            else
-                echo "❌ Failed to activate virtual environment"
-            fi
-            
-            echo ""
-            echo "🔍 Manual Gunicorn Test:"
-            cd /home/ec2-user/lifeline/current/backend/LifeLine
-            source /home/ec2-user/lifeline/venv/bin/activate
-            export DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY}"
-            export OPENAI_API_KEY="${OPENAI_API_KEY}"
-            export DEBUG=False
-            export ALLOWED_HOSTS="*"
-            timeout 10s gunicorn LifeLine.wsgi:application --bind 127.0.0.1:8001 --daemon || echo "❌ Manual gunicorn test failed"
-            sleep 2
-            curl -I http://127.0.0.1:8001 || echo "❌ Manual gunicorn not responding"
-            pkill -f "gunicorn.*8001" || true
-            
-            echo ""
-            echo "=================================="
-            exit 1
-        fi
-        
-        # Start nginx
-        sudo systemctl enable nginx
-        sudo systemctl start nginx
-        
-        # Check nginx status
-        if ! sudo systemctl is_active --quiet nginx; then
-            echo "❌ Nginx service failed to start"
-            sudo systemctl status nginx
-            sudo nginx -t
-            exit 1
-        fi
-        
-        # Verify services are running
-        echo "✅ Backend service status: $(sudo systemctl is-active lifeline-backend)"
-        echo "✅ Nginx service status: $(sudo systemctl is-active nginx)"
-        
-        # Additional diagnostics
-        echo "🔍 Running diagnostics..."
-        
-        # Check if ports are actually listening
-        echo "📡 Checking listening ports..."
-        sudo netstat -tlnp | grep -E ':(80|8000|443)' || echo "Port check failed"
-        
-        # Check nginx processes
-        echo "🌐 Nginx processes:"
-        ps aux | grep nginx | grep -v grep || echo "No nginx processes found"
-        
-        # Check Django processes
-        echo "🐍 Django processes:"
-        ps aux | grep manage.py | grep -v grep || echo "No Django processes found"
-        
-        # Test local connections
-        echo "🔌 Testing local connections..."
-        curl -I http://localhost:80 2>/dev/null | head -1 || echo "❌ Nginx not responding on port 80"
-        curl -I http://localhost:8000 2>/dev/null | head -1 || echo "❌ Django not responding on port 8000"
-        
-        # Check system firewall
-        echo "🔥 Checking system firewall..."
-        sudo iptables -L INPUT -n | head -10 || echo "iptables check failed"
-        
-        # Check for any blocking services
-        echo "📋 Service status summary:"
-        sudo systemctl status lifeline-backend --no-pager -l || echo "Backend status failed"
-        sudo systemctl status nginx --no-pager -l || echo "Nginx status failed"
-        
-        echo "🎉 Deployment completed!"
-        EOF
-        
-        chmod +x deployment/deploy.sh
-
-    - name: Show GitHub Runner IP
-      run: |
-        echo "🌐 Deploying from branch: ${{ github.ref_name }}"
-        echo "🌐 GitHub Actions Runner IP Information:"
-        echo "Runner IP: $(curl -s ifconfig.me || curl -s icanhazip.com || echo 'Unknown')"
-        echo ""
-        echo "⚠️  SECURITY GROUP CONFIGURATION NEEDED:"
-        echo "Your EC2 security group needs to allow SSH (port 22) from this IP"
-        echo "Current rule allows: 136.26.51.147/32 (your local machine)"
-        echo "Required: Add rule for GitHub Actions runner IPs"
-        echo ""
-        echo "Quick fix: Change SSH source to 0.0.0.0/0"
-
-    - name: Setup SSH
-      env:
-        EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-      run: |
-        echo "🔑 Setting up SSH connection..."
-        
-        # Create SSH directory
-        mkdir -p ~/.ssh
-        chmod 700 ~/.ssh
-        
-        # Setup private key
-        echo "$EC2_SSH_PRIVATE_KEY" > ~/.ssh/private_key
-        chmod 600 ~/.ssh/private_key
-        
-        # Validate private key format
-        if ssh-keygen -l -f ~/.ssh/private_key > /dev/null 2>&1; then
-          echo "✅ SSH private key is valid"
-        else
-          echo "❌ SSH private key format is invalid"
-          exit 1
-        fi
-        
-        # Configure SSH known hosts
-        ssh-keyscan -H ${{ secrets.EC2_HOSTNAME }} >> ~/.ssh/known_hosts 2>/dev/null || true
-
-    - name: Test SSH Connection
-      env:
-        EC2_HOSTNAME: ${{ secrets.EC2_HOSTNAME }}
-        EC2_USER_NAME: ${{ secrets.EC2_USER_NAME }}
-      run: |
-        echo "🔍 Testing SSH connection..."
-        
-        # Test with shorter timeout for faster feedback
-        if timeout 30 ssh -o ConnectTimeout=10 -o BatchMode=yes -i ~/.ssh/private_key ${EC2_USER_NAME}@${EC2_HOSTNAME} 'echo "✅ SSH connection successful!"'; then
-            echo "🎉 Ready to deploy!"
-        else
-            echo ""
-            echo "❌ SSH Connection Failed!"
-            echo ""
-            echo "SOLUTION: Update your EC2 Security Group"
-            echo "1. Go to AWS Console → EC2 → Security Groups"
-            echo "2. Select security group: sg-061598a25c91a141e"
-            echo "3. Edit inbound rules"
-            echo "4. Change SSH rule source from '136.26.51.147/32' to '0.0.0.0/0'"
-            echo ""
-            echo "Current runner IP: $(curl -s ifconfig.me 2>/dev/null || echo 'Unknown')"
-            echo "Your rule allows: 136.26.51.147/32"
-            echo ""
-            exit 1
-        fi
-
-    - name: Deploy to EC2
-      env:
-        EC2_HOSTNAME: ${{ secrets.EC2_HOSTNAME }}
-        EC2_USER_NAME: ${{ secrets.EC2_USER_NAME }}
-        DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
-        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      run: |
-        echo "🚀 Deploying to EC2 instance..."
-        
-        # Copy deployment package
-        echo "📦 Copying deployment package..."
-        scp -o ConnectTimeout=30 -i ~/.ssh/private_key -r deployment ${EC2_USER_NAME}@${EC2_HOSTNAME}:/tmp/lifeline-deployment
-        
-        # Execute deployment script
-        echo "🔧 Executing deployment script..."
-        ssh -o ConnectTimeout=30 -i ~/.ssh/private_key ${EC2_USER_NAME}@${EC2_HOSTNAME} "
-          export DJANGO_SECRET_KEY='${DJANGO_SECRET_KEY}'
-          export OPENAI_API_KEY='${OPENAI_API_KEY}'
-          chmod +x /tmp/lifeline-deployment/deploy.sh
-          sudo -E DJANGO_SECRET_KEY='${DJANGO_SECRET_KEY}' OPENAI_API_KEY='${OPENAI_API_KEY}' /tmp/lifeline-deployment/deploy.sh
-        "
-
-    - name: Verify deployment
-      env:
-        EC2_HOSTNAME: ${{ secrets.EC2_HOSTNAME }}
-      run: |
-        echo "🔍 Verifying deployment..."
-        
-        # Wait for services to start
-        sleep 30
-        
-        # Test frontend
-        if curl -f -s --max-time 10 http://${EC2_HOSTNAME} > /dev/null; then
-            echo "✅ Frontend is responding"
-        else
-            echo "⚠️ Frontend may still be starting"
-        fi
-        
-        # Test backend API
-        if curl -f -s --max-time 10 http://${EC2_HOSTNAME}/api/ > /dev/null; then
-            echo "✅ Backend API is responding"
-        else
-            echo "⚠️ Backend API may still be starting"
-        fi
-
-    - name: Deployment summary
-      if: always()
-      run: |
-        if [ ${{ job.status }} == 'success' ]; then
-          echo "🎉 Deployment successful!"
-          echo "🌐 Application: http://${{ secrets.EC2_HOSTNAME }}"
-          echo "🔧 Admin: http://${{ secrets.EC2_HOSTNAME }}/admin/"
-        else
-          echo "❌ Deployment failed - check logs above"
-        fi
+        # Start services
+        ssh -i private_key ${USER_NAME}@${HOSTNAME} 'sudo systemctl daemon-reload && sudo systemctl enable lifeline-backend && sudo systemctl start lifeline-backend && sudo systemctl enable nginx && sudo systemctl start nginx'
