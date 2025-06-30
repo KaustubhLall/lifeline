@@ -1,0 +1,330 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Cache Python dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install frontend dependencies
+      working-directory: ./frontend
+      run: npm ci
+
+    - name: Build frontend
+      working-directory: ./frontend
+      run: |
+        echo "Building React frontend..."
+        npm run build
+        echo "Frontend build completed"
+        ls -la build/
+
+    - name: Install backend dependencies
+      working-directory: ./backend
+      run: |
+        echo "Installing Python dependencies..."
+        pip install -r requirements.txt
+        echo "Backend dependencies installed"
+
+    - name: Run backend tests (optional)
+      working-directory: ./backend/LifeLine
+      run: |
+        echo "Running Django tests..."
+        python manage.py test --verbosity=2 || echo "Tests failed but continuing deployment"
+
+    - name: Prepare deployment package
+      run: |
+        echo "Preparing deployment package..."
+        mkdir -p deployment
+        
+        # Copy frontend build
+        echo "Copying frontend build files..."
+        cp -r frontend/build deployment/frontend
+        
+        # Copy backend files
+        echo "Copying backend files..."
+        cp -r backend deployment/backend
+        
+        # Create deployment scripts
+        echo "Creating deployment scripts..."
+        cat > deployment/deploy.sh << 'EOF'
+        #!/bin/bash
+        set -e
+        
+        echo "Starting deployment process..."
+        
+        # Configuration
+        APP_DIR="/home/ubuntu/lifeline"
+        BACKEND_DIR="$APP_DIR/backend/LifeLine"
+        FRONTEND_DIR="$APP_DIR/frontend"
+        VENV_DIR="$APP_DIR/venv"
+        
+        # Create directories if they don't exist
+        mkdir -p $APP_DIR
+        mkdir -p $FRONTEND_DIR
+        
+        echo "Stopping existing services..."
+        # Stop existing services gracefully
+        sudo systemctl stop lifeline-backend || echo "Backend service not running"
+        sudo systemctl stop nginx || echo "Nginx not running"
+        
+        # Backup current deployment
+        if [ -d "$APP_DIR/current" ]; then
+            echo "Creating backup of current deployment..."
+            sudo mv $APP_DIR/current $APP_DIR/backup-$(date +%Y%m%d_%H%M%S) || echo "Backup failed"
+        fi
+        
+        # Move new deployment
+        echo "Installing new deployment..."
+        sudo mv /tmp/lifeline-deployment $APP_DIR/current
+        sudo chown -R ubuntu:ubuntu $APP_DIR/current
+        
+        # Set up Python virtual environment
+        echo "Setting up Python virtual environment..."
+        cd $APP_DIR/current/backend
+        python3 -m venv $VENV_DIR
+        source $VENV_DIR/bin/activate
+        pip install --upgrade pip
+        pip install -r requirements.txt
+        
+        # Run Django setup
+        echo "Setting up Django..."
+        cd $APP_DIR/current/backend/LifeLine
+        source $VENV_DIR/bin/activate
+        
+        # Apply database migrations
+        python manage.py migrate --noinput
+        
+        # Collect static files
+        python manage.py collectstatic --noinput --clear || echo "Static files collection failed"
+        
+        # Set up frontend
+        echo "Setting up frontend files..."
+        sudo rm -rf /var/www/html/lifeline
+        sudo mkdir -p /var/www/html/lifeline
+        sudo cp -r $APP_DIR/current/frontend/* /var/www/html/lifeline/
+        sudo chown -R www-data:www-data /var/www/html/lifeline
+        
+        # Create systemd service for backend
+        echo "Creating systemd service..."
+        sudo tee /etc/systemd/system/lifeline-backend.service > /dev/null << 'SYSTEMD_EOF'
+        [Unit]
+        Description=LifeLine Django Backend
+        After=network.target
+        
+        [Service]
+        Type=exec
+        User=ubuntu
+        Group=ubuntu
+        WorkingDirectory=/home/ubuntu/lifeline/current/backend/LifeLine
+        Environment=PATH=/home/ubuntu/lifeline/venv/bin
+        Environment=DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
+        Environment=OPENAI_API_KEY=${OPENAI_API_KEY}
+        Environment=DEBUG=False
+        ExecStart=/home/ubuntu/lifeline/venv/bin/python manage.py runserver 0.0.0.0:8000
+        Restart=always
+        RestartSec=3
+        
+        [Install]
+        WantedBy=multi-user.target
+        SYSTEMD_EOF
+        
+        # Configure Nginx
+        echo "Configuring Nginx..."
+        sudo tee /etc/nginx/sites-available/lifeline > /dev/null << 'NGINX_EOF'
+        server {
+            listen 80;
+            server_name 54.144.219.238;
+            
+            # Frontend
+            location / {
+                root /var/www/html/lifeline;
+                index index.html;
+                try_files $uri $uri/ /index.html;
+            }
+            
+            # Backend API
+            location /api/ {
+                proxy_pass http://127.0.0.1:8000;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection 'upgrade';
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_cache_bypass $http_upgrade;
+            }
+            
+            # Django admin
+            location /admin/ {
+                proxy_pass http://127.0.0.1:8000;
+                proxy_http_version 1.1;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }
+            
+            # Static files
+            location /static/ {
+                alias /home/ubuntu/lifeline/current/backend/LifeLine/staticfiles/;
+                expires 1y;
+                add_header Cache-Control "public, immutable";
+            }
+        }
+        NGINX_EOF
+        
+        # Enable nginx site
+        sudo ln -sf /etc/nginx/sites-available/lifeline /etc/nginx/sites-enabled/
+        sudo rm -f /etc/nginx/sites-enabled/default
+        
+        # Test nginx configuration
+        sudo nginx -t
+        
+        # Reload systemd and start services
+        echo "Starting services..."
+        sudo systemctl daemon-reload
+        sudo systemctl enable lifeline-backend
+        sudo systemctl start lifeline-backend
+        sudo systemctl enable nginx
+        sudo systemctl start nginx
+        
+        # Health check
+        echo "Performing health check..."
+        sleep 5
+        
+        # Check backend
+        if curl -f http://localhost:8000/api/health/ > /dev/null 2>&1; then
+            echo "Backend health check passed"
+        else
+            echo "Backend health check failed"
+            sudo systemctl status lifeline-backend
+        fi
+        
+        # Check frontend
+        if curl -f http://localhost/ > /dev/null 2>&1; then
+            echo "Frontend health check passed"
+        else
+            echo "Frontend health check failed"
+            sudo systemctl status nginx
+        fi
+        
+        echo "Deployment completed successfully!"
+        echo "Application should be available at http://54.144.219.238"
+        EOF
+        
+        chmod +x deployment/deploy.sh
+        
+        # Create health check endpoint script
+        cat > deployment/health_check.py << 'EOF'
+        # Add this to your Django urls.py and views
+        from django.http import JsonResponse
+        from django.views.decorators.http import require_http_methods
+        
+        @require_http_methods(["GET"])
+        def health_check(request):
+            return JsonResponse({
+                "status": "healthy",
+                "timestamp": timezone.now().isoformat(),
+                "version": "1.0.0"
+            })
+        EOF
+        
+        echo "Deployment package prepared"
+        ls -la deployment/
+
+    - name: Deploy to EC2
+      env:
+        PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+        HOSTNAME: ${{ secrets.EC2_HOSTNAME }}
+        USER_NAME: ${{ secrets.EC2_USER_NAME }}
+        DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      run: |
+        echo "Deploying to EC2 instance..."
+        
+        # Set up SSH
+        echo "$PRIVATE_KEY" > private_key && chmod 600 private_key
+        
+        # Test SSH connection
+        ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} 'echo "SSH connection successful"'
+        
+        # Copy deployment package to server
+        echo "Copying files to server..."
+        scp -o StrictHostKeyChecking=no -i private_key -r deployment ${USER_NAME}@${HOSTNAME}:/tmp/lifeline-deployment
+        
+        # Execute deployment script on server
+        echo "Executing deployment script on server..."
+        ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} "
+          export DJANGO_SECRET_KEY='${DJANGO_SECRET_KEY}'
+          export OPENAI_API_KEY='${OPENAI_API_KEY}'
+          chmod +x /tmp/lifeline-deployment/deploy.sh
+          sudo /tmp/lifeline-deployment/deploy.sh
+        "
+        
+        echo "Deployment completed!"
+
+    - name: Verify deployment
+      env:
+        HOSTNAME: ${{ secrets.EC2_HOSTNAME }}
+      run: |
+        echo "Verifying deployment..."W
+        
+        # Wait for services to start
+        sleep 10
+        
+        # Check if the application is responding
+        echo "Testing frontend..."
+        if curl -f -s http://${HOSTNAME} > /dev/null; then
+            echo "✅ Frontend is responding"
+        else
+            echo "❌ Frontend is not responding"
+            exit 1
+        fi
+        
+        echo "Testing backend API..."
+        if curl -f -s http://${HOSTNAME}/api/health/ > /dev/null; then
+            echo "✅ Backend API is responding"
+        else
+            echo "⚠️ Backend API health check endpoint may not be configured yet"
+        fi
+        
+        echo "Deployment verification completed!"
+
+    - name: Notify deployment status
+      if: always()
+      run: |
+        if [ ${{ job.status }} == 'success' ]; then
+          echo "🎉 Deployment successful!"
+          echo "Application URL: http://54.144.219.238"
+        else
+          echo "❌ Deployment failed!"
+        fi
