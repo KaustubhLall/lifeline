@@ -1,0 +1,94 @@
+/* ChatSidebar Component Styles */
+.chat-sidebar {
+    height: 100vh;
+    overflow-y: auto;
+    border-right: 1px solid var(--border-color);
+    background: linear-gradient(180deg, var(--sidebar-bg), #0f1419);
+    padding: 0;
+    margin: 0;
+    /* Ensure no top spacing */
+    position: relative;
+    top: 0;
+}
+
+.new-chat-button {
+    width: 100%;
+    padding: 1rem;
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-hover));
+    color: white;
+    border: none;
+    font-weight: bold;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 1rem;
+    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+    border-bottom: 2px solid rgba(0, 123, 255, 0.2);
+    margin: 0;
+    border-radius: 0;
+    /* Ensure it's at the very top */
+    position: relative;
+    top: 0;
+}
+
+.empty-conversations {
+    padding: 2rem 1rem;
+    text-align: center;
+    color: var(--text-muted);
+    font-style: italic;
+    background: rgba(255, 255, 255, 0.05);
+    margin: 1rem;
+    border-radius: 8px;
+    border: 1px dashed var(--border-color);
+}
+
+.conversation-item {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: none;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border-light);
+    transition: all 0.3s ease;
+    color: var(--text-color);
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    position: relative;
+    margin: 0;
+}
+
+.conversation-item:hover {
+    background: var(--hover-bg);
+    transform: translateX(4px);
+    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.1);
+}
+
+.conversation-item.active {
+    background: var(--active-bg);
+    color: var(--active-text);
+    font-weight: 500;
+    border-left: 4px solid var(--primary-color);
+    box-shadow: 0 2px 12px rgba(0, 123, 255, 0.2);
+}
+
+.conversation-title {
+    font-size: 0.9rem;
+    font-weight: 500;
+    line-height: 1.2;
+    color: inherit;
+}
+
+.conversation-id {
+    font-size: 0.75rem;
+    color: var(--text-light);
+    opacity: 0.7;
+    font-family: 'Courier New', monospace;
+}
+
+.conversation-item.active .conversation-id {
+    color: var(--primary-color);
+    opacity: 0.9;
+    font-weight: 600;
+}

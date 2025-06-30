@@ -28,7 +28,19 @@ if not SECRET_KEY:
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '192.168.86.47', '10.5.0.2', '0.0.0.0', '*']
+# Host configuration for development and production
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    '192.168.86.47',
+    '10.5.0.2',
+    '0.0.0.0',
+    # Add EC2 compatibility
+    '*.compute.amazonaws.com',
+    '*.amazonaws.com',
+    # Allow any host in development (remove in production)
+    '*'
+]
 
 # Application definition
 
@@ -139,14 +151,14 @@ CORS_ORIGIN_WHITELIST = [
     'https://10.5.0.2:3000',
 ]
 CORS_ALLOWED_ORIGINS = [
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-    'http://192.168.86.47:3000',
-    'http://10.5.0.2:3000',
-    'https://localhost:3000',
-    'https://127.0.0.1:3000',
-    'https://192.168.86.47:3000',
-    'https://10.5.0.2:3000',
+    "http://localhost:3000",
+    "https://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://127.0.0.1:3000",
+    "http://10.5.0.2:3000",
+    "https://10.5.0.2:3000",
+    "http://192.168.86.47:3000",
+    "https://192.168.86.47:3000",
 ]
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = [
@@ -177,6 +189,17 @@ SECURE_REFERRER_POLICY = None
 if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = True
     CORS_ALLOW_CREDENTIALS = True
+
+# Security settings for HTTPS
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_SSL_REDIRECT = False  # Set to True in production with proper SSL setup
+USE_TLS = True
+
+# Session and CSRF settings for cross-origin requests
+SESSION_COOKIE_SECURE = False  # Set to True in production
+CSRF_COOKIE_SECURE = False    # Set to True in production
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
 
 # Rest Framework settings
 REST_FRAMEWORK = {
