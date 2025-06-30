@@ -12,5 +12,7 @@ langgraph
 # comms
 twilio
 
+# math/ml
+numpy
 
 # connectors
