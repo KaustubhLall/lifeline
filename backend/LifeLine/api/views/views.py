@@ -10,9 +10,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from ..models.chat import Conversation, Message, MessageNote, UserNote
-from ..utils.llm import call_llm_text, APIBudgetError, ModelNotAvailableError, LLMError
+from ..models.chat import Conversation, Message, MessageNote, Memory
+from ..utils.llm import (call_llm_text, call_llm_with_rag_context, extract_memories_from_messages,
+                        APIBudgetError, ModelNotAvailableError, LLMError)
 from ..utils.prompts import get_system_prompt
+from ..utils.memory_utils import get_memory_manager
 
 # Configure logging with filename and line numbers
 logging.basicConfig(
@@ -52,7 +54,8 @@ class ConversationListCreateView(APIView):
                 'created_at': c.created_at,
                 'updated_at': c.updated_at,
                 'message_count': c.messages.count(),
-                'last_message': c.messages.last().content if c.messages.exists() else None
+                'last_message': c.messages.last().content if c.messages.exists() else None,
+                'memory_count': c.extracted_memories.filter(is_active=True).count()  # Show memory count
             } for c in conversations]
 
             logger.info(f"Retrieved {len(data)} conversations for user {request.user.username}")
@@ -70,8 +73,9 @@ class ConversationListCreateView(APIView):
 
         try:
             title = request.data.get('title', '')
-            model = request.data.get('model', 'gpt-4.1-nano')
+            model = request.data.get('model', 'gpt-4o-mini')
             mode = request.data.get('mode', 'conversational')
+            enable_rag = request.data.get('enable_rag', True)  # RAG enabled by default
 
             # Create new conversation
             conversation = Conversation.objects.create(
@@ -80,12 +84,13 @@ class ConversationListCreateView(APIView):
                 context={
                     'created_at': str(timezone.now()),
                     'model': model,
-                    'mode': mode
+                    'mode': mode,
+                    'enable_rag': enable_rag
                 }
             )
 
             logger.info(
-                f"Created new conversation {conversation.id} for user {request.user.username} - Model: {model}, Mode: {mode}")
+                f"Created new conversation {conversation.id} for user {request.user.username} - Model: {model}, Mode: {mode}, RAG: {enable_rag}")
 
             # Get the conversation data in the same format as GET response
             data = {
@@ -94,7 +99,8 @@ class ConversationListCreateView(APIView):
                 'created_at': conversation.created_at,
                 'updated_at': conversation.updated_at,
                 'message_count': 0,
-                'last_message': None
+                'last_message': None,
+                'memory_count': 0
             }
 
             return Response(data, status=status.HTTP_201_CREATED)
@@ -192,11 +198,12 @@ class MessageListCreateView(APIView):
         try:
             conversation = get_object_or_404(Conversation, id=conversation_id, user=request.user)
             user_message = request.data.get('content')
-            model = request.data.get('model', 'gpt-4.1-nano')
+            model = request.data.get('model', 'gpt-4o-mini')
             mode = request.data.get('mode', 'conversational')
+            enable_rag = conversation.context.get('enable_rag', True)
 
             logger.info(
-                f"Processing message for conversation {conversation_id} - User: {request.user.username}, Model: {model}, Mode: {mode}, Length: {len(user_message) if user_message else 0}")
+                f"Processing message for conversation {conversation_id} - User: {request.user.username}, Model: {model}, Mode: {mode}, RAG: {enable_rag}, Length: {len(user_message) if user_message else 0}")
 
             if not user_message:
                 logger.warning("Attempted to send empty message")
@@ -211,28 +218,65 @@ class MessageListCreateView(APIView):
                 sender=request.user,
                 content=user_message,
                 role='user',
-                metadata={'model': model, 'mode': mode}
+                metadata={'model': model, 'mode': mode, 'enable_rag': enable_rag}
             )
 
             logger.info(f"Created user message {user_msg.id} in conversation {conversation_id}")
 
-            # Get conversation history
-            recent_messages = conversation.messages.order_by('-created_at')[:5]
-            context = "\n".join([
-                f"{m.role}: {m.content}"
-                for m in reversed(recent_messages)
-            ])
-
-            # Get system prompt for the selected mode
-            system_prompt = get_system_prompt(mode)
-
-            # Prepare the full prompt with context
-            prompt = f"{system_prompt}\n\nPrevious messages:\n{context}\n\nUser: {user_message}"
-
-            logger.info(f"Calling LLM with context length: {len(context)}, total prompt length: {len(prompt)}")
-
             try:
-                bot_response = call_llm_text(prompt, model=model)
+                if enable_rag:
+                    # Use RAG-enhanced response generation
+                    logger.info(f"Using RAG-enhanced response for conversation {conversation_id}")
+
+                    llm_result = call_llm_with_rag_context(
+                        user_id=request.user.id,
+                        current_message=user_message,
+                        conversation_id=conversation_id,
+                        chat_mode=mode,
+                        model=model
+                    )
+
+                    bot_response = llm_result["response"]
+                    response_metadata = llm_result["metadata"]
+
+                    logger.info(f"RAG response generated - Memories: {response_metadata['memory_count']}, "
+                              f"Messages: {response_metadata['message_count']}, "
+                              f"Context tokens: {response_metadata['total_context_tokens']}")
+
+                    # Extract memories from new conversation if it's a new conversation (few messages)
+                    message_count = conversation.messages.count()
+                    if message_count >= 3 and message_count % 5 == 0:  # Extract memories every 5 messages after the first 3
+                        logger.info(f"Extracting memories from conversation {conversation_id} (message count: {message_count})")
+                        try:
+                            extracted_memories = extract_memories_from_messages(request.user.id, conversation_id)
+                            logger.info(f"Extracted {len(extracted_memories)} new memories from conversation {conversation_id}")
+                        except Exception as memory_error:
+                            logger.warning(f"Failed to extract memories from conversation {conversation_id}: {memory_error}")
+                else:
+                    # Use traditional context-based response
+                    logger.info(f"Using traditional context-based response for conversation {conversation_id}")
+
+                    # Get conversation history
+                    recent_messages = conversation.messages.order_by('-created_at')[:5]
+                    context = "\n".join([
+                        f"{m.role}: {m.content}"
+                        for m in reversed(recent_messages)
+                    ])
+
+                    # Get system prompt for the selected mode
+                    system_prompt = get_system_prompt(mode)
+                    prompt = f"{system_prompt}\n\nPrevious messages:\n{context}\n\nUser: {user_message}"
+
+                    bot_response = call_llm_text(prompt, model=model)
+                    response_metadata = {
+                        'memory_count': 0,
+                        'message_count': len(recent_messages),
+                        'total_context_tokens': 0,
+                        'chat_mode': mode,
+                        'model': model,
+                        'traditional_context': True
+                    }
+
                 logger.info(
                     f"Received response from LLM for conversation {conversation_id}, response length: {len(bot_response)}")
 
@@ -243,19 +287,25 @@ class MessageListCreateView(APIView):
                     content=bot_response,
                     is_bot=True,
                     role='assistant',
-                    metadata={'model': model, 'mode': mode}
+                    metadata={
+                        'model': model,
+                        'mode': mode,
+                        'enable_rag': enable_rag,
+                        'response_metadata': response_metadata
+                    }
                 )
 
                 logger.info(f"Created bot message {bot_msg.id} in conversation {conversation_id}")
 
                 # Update conversation context
-                conversation.context = {
+                conversation.context.update({
                     'last_user_message': user_message,
                     'last_bot_response': bot_response,
                     'message_count': conversation.messages.count(),
                     'current_mode': mode,
-                    'current_model': model
-                }
+                    'current_model': model,
+                    'last_response_metadata': response_metadata
+                })
                 conversation.save()
 
                 return Response({

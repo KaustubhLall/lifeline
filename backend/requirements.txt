@@ -8,6 +8,7 @@ django-cors-headers
 openai
 langchain
 langgraph
+tiktoken
 
 # comms
 twilio
