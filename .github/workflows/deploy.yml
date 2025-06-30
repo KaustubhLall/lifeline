@@ -2,29 +2,27 @@ name: Deploy to EC2
 
 on:
   push:
-    branches: [ main, develop ]
-  pull_request:
     branches: [ main ]
   workflow_dispatch:
     inputs:
-      branch:
-        description: 'Branch to deploy'
+      confirm_deploy:
+        description: 'Type "deploy" to confirm deployment'
         required: true
-        default: 'main'
-        type: choice
-        options:
-          - main
-          - develop
-          - staging
+        default: ''
+        type: string
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Only run if manual trigger confirms deployment or it's a push to main
+    if: github.event_name == 'push' || github.event.inputs.confirm_deploy == 'deploy'
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        ref: main  # Always deploy from main branch
 
     - name: Set up Node.js
       uses: actions/setup-node@v4
@@ -256,37 +254,18 @@ jobs:
         
         chmod +x deployment/deploy.sh
 
-    - name: Debug Connection Issues
-      env:
-        EC2_HOSTNAME: ${{ secrets.EC2_HOSTNAME }}
+    - name: Show GitHub Runner IP
       run: |
-        echo "🔍 Debugging connection to EC2..."
-        echo "Target hostname: ${EC2_HOSTNAME}"
-        echo "Runner IP: $(curl -s ifconfig.me 2>/dev/null || echo 'Unknown')"
-        
-        # Test basic connectivity
-        echo "Testing basic connectivity..."
-        if timeout 10 ping -c 3 ${EC2_HOSTNAME} > /dev/null 2>&1; then
-          echo "✅ EC2 instance is reachable via ping"
-        else
-          echo "❌ EC2 instance is not reachable via ping"
-        fi
-        
-        # Test if port 22 is open
-        echo "Testing SSH port (22)..."
-        if timeout 10 nc -zv ${EC2_HOSTNAME} 22 2>/dev/null; then
-          echo "✅ SSH port 22 is open"
-        else
-          echo "❌ SSH port 22 is not accessible"
-        fi
-        
-        # Test HTTP port for comparison
-        echo "Testing HTTP port (80)..."
-        if timeout 10 nc -zv ${EC2_HOSTNAME} 80 2>/dev/null; then
-          echo "✅ HTTP port 80 is open"
-        else
-          echo "❌ HTTP port 80 is not accessible"
-        fi
+        echo "🌐 Deploying from branch: ${{ github.ref_name }}"
+        echo "🌐 GitHub Actions Runner IP Information:"
+        echo "Runner IP: $(curl -s ifconfig.me || curl -s icanhazip.com || echo 'Unknown')"
+        echo ""
+        echo "⚠️  SECURITY GROUP CONFIGURATION NEEDED:"
+        echo "Your EC2 security group needs to allow SSH (port 22) from this IP"
+        echo "Current rule allows: 136.26.51.147/32 (your local machine)"
+        echo "Required: Add rule for GitHub Actions runner IPs"
+        echo ""
+        echo "Quick fix: Change SSH source to 0.0.0.0/0"
 
     - name: Setup SSH
       env:
@@ -307,51 +286,40 @@ jobs:
           echo "✅ SSH private key is valid"
         else
           echo "❌ SSH private key format is invalid"
-          echo "Please ensure the EC2_SSH_PRIVATE_KEY secret contains the full .pem file content"
+          exit 1
         fi
         
         # Configure SSH known hosts
-        echo "🌐 Configuring SSH known hosts..."
         ssh-keyscan -H ${{ secrets.EC2_HOSTNAME }} >> ~/.ssh/known_hosts 2>/dev/null || true
 
-    - name: Test SSH Connection 
+    - name: Test SSH Connection
       env:
         EC2_HOSTNAME: ${{ secrets.EC2_HOSTNAME }}
         EC2_USER_NAME: ${{ secrets.EC2_USER_NAME }}
       run: |
         echo "🔍 Testing SSH connection..."
         
-        # Test connection with detailed verbose output
-        for i in {1..3}; do
-          echo "SSH attempt $i/3..."
-          if timeout 45 ssh -vvv -o ConnectTimeout=20 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=no -o BatchMode=yes -i ~/.ssh/private_key ${EC2_USER_NAME}@${EC2_HOSTNAME} 'echo "SSH connection successful - $(date)" && uptime' 2>&1; then
-            echo "✅ SSH connection established successfully"
-            break
-          else
-            echo "❌ SSH connection attempt $i failed"
-            if [ $i -eq 3 ]; then
-              echo ""
-              echo "🚨 SSH Connection Failed - Troubleshooting Steps:"
-              echo "1. Verify EC2 instance is running in AWS Console"
-              echo "2. Check if EC2 has the correct public IP: ${EC2_HOSTNAME}"
-              echo "3. Verify security group allows SSH (port 22) from your source"
-              echo "4. Ensure EC2 instance has the correct key pair associated"
-              echo "5. Check if EC2 instance is in a public subnet with internet gateway"
-              echo ""
-              echo "Common fixes:"
-              echo "- Add security group rule: SSH (22) from 0.0.0.0/0"
-              echo "- Restart EC2 instance if it's been running long"
-              echo "- Check Network ACLs aren't blocking traffic"
-              echo ""
-              exit 1
-            fi
-            sleep 10
-          fi
-        done
+        # Test with shorter timeout for faster feedback
+        if timeout 30 ssh -o ConnectTimeout=10 -o BatchMode=yes -i ~/.ssh/private_key ${EC2_USER_NAME}@${EC2_HOSTNAME} 'echo "✅ SSH connection successful!"'; then
+            echo "🎉 Ready to deploy!"
+        else
+            echo ""
+            echo "❌ SSH Connection Failed!"
+            echo ""
+            echo "SOLUTION: Update your EC2 Security Group"
+            echo "1. Go to AWS Console → EC2 → Security Groups"
+            echo "2. Select security group: sg-061598a25c91a141e"
+            echo "3. Edit inbound rules"
+            echo "4. Change SSH rule source from '136.26.51.147/32' to '0.0.0.0/0'"
+            echo ""
+            echo "Current runner IP: $(curl -s ifconfig.me 2>/dev/null || echo 'Unknown')"
+            echo "Your rule allows: 136.26.51.147/32"
+            echo ""
+            exit 1
+        fi
 
     - name: Deploy to EC2
       env:
-        EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
         EC2_HOSTNAME: ${{ secrets.EC2_HOSTNAME }}
         EC2_USER_NAME: ${{ secrets.EC2_USER_NAME }}
         DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
@@ -361,11 +329,11 @@ jobs:
         
         # Copy deployment package
         echo "📦 Copying deployment package..."
-        scp -o ConnectTimeout=30 -o ServerAliveInterval=10 -i ~/.ssh/private_key -r deployment ${EC2_USER_NAME}@${EC2_HOSTNAME}:/tmp/lifeline-deployment
+        scp -o ConnectTimeout=30 -i ~/.ssh/private_key -r deployment ${EC2_USER_NAME}@${EC2_HOSTNAME}:/tmp/lifeline-deployment
         
         # Execute deployment script
         echo "🔧 Executing deployment script..."
-        ssh -o ConnectTimeout=30 -o ServerAliveInterval=10 -i ~/.ssh/private_key ${EC2_USER_NAME}@${EC2_HOSTNAME} "
+        ssh -o ConnectTimeout=30 -i ~/.ssh/private_key ${EC2_USER_NAME}@${EC2_HOSTNAME} "
           export DJANGO_SECRET_KEY='${DJANGO_SECRET_KEY}'
           export OPENAI_API_KEY='${OPENAI_API_KEY}'
           chmod +x /tmp/lifeline-deployment/deploy.sh
@@ -378,33 +346,30 @@ jobs:
       run: |
         echo "🔍 Verifying deployment..."
         
-        # Wait for services to fully start
+        # Wait for services to start
         sleep 30
         
         # Test frontend
         if curl -f -s --max-time 10 http://${EC2_HOSTNAME} > /dev/null; then
             echo "✅ Frontend is responding"
         else
-            echo "⚠️ Frontend check failed - may still be starting"
+            echo "⚠️ Frontend may still be starting"
         fi
         
         # Test backend API
         if curl -f -s --max-time 10 http://${EC2_HOSTNAME}/api/ > /dev/null; then
             echo "✅ Backend API is responding"
         else
-            echo "⚠️ Backend API check failed - may still be starting"
+            echo "⚠️ Backend API may still be starting"
         fi
-        
-        echo "✅ Deployment verification completed!"
 
     - name: Deployment summary
       if: always()
       run: |
         if [ ${{ job.status }} == 'success' ]; then
           echo "🎉 Deployment successful!"
-          echo "🌐 Application URL: http://${{ secrets.EC2_HOSTNAME }}"
-          echo "🔧 Admin Panel: http://${{ secrets.EC2_HOSTNAME }}/admin/"
+          echo "🌐 Application: http://${{ secrets.EC2_HOSTNAME }}"
+          echo "🔧 Admin: http://${{ secrets.EC2_HOSTNAME }}/admin/"
         else
-          echo "❌ Deployment failed!"
-          echo "Please check the logs above for details."
+          echo "❌ Deployment failed - check logs above"
         fi
