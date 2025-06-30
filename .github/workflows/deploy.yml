@@ -173,6 +173,15 @@ jobs:
         sudo cp -r $APP_DIR/current/frontend/* /var/www/html/lifeline/
         sudo chown -R nginx:nginx /var/www/html/lifeline
         
+        # Create environment file for systemd
+        echo "🔒 Creating environment file for backend service..."
+        sudo tee /etc/lifeline.env > /dev/null << EOF
+        DJANGO_SECRET_KEY='${DJANGO_SECRET_KEY}'
+        OPENAI_API_KEY='${OPENAI_API_KEY}'
+        DEBUG=False
+        ALLOWED_HOSTS='*'
+        EOF
+        
         # Create systemd service
         echo "🔧 Creating backend service..."
         sudo tee /etc/systemd/system/lifeline-backend.service > /dev/null << SYSTEMD_EOF
@@ -185,12 +194,8 @@ jobs:
         User=ec2-user
         Group=ec2-user
         WorkingDirectory=/home/ec2-user/lifeline/current/backend/LifeLine
-        Environment=PATH=/home/ec2-user/lifeline/venv/bin
-        Environment=DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
-        Environment=OPENAI_API_KEY=${OPENAI_API_KEY}
-        Environment=DEBUG=False
-        Environment=ALLOWED_HOSTS=*
-        ExecStart=/home/ec2-user/lifeline/venv/bin/python manage.py runserver 0.0.0.0:8000
+        EnvironmentFile=/etc/lifeline.env
+        ExecStart=/home/ec2-user/lifeline/venv/bin/gunicorn LifeLine.wsgi:application --bind 0.0.0.0:8000
         Restart=always
         RestartSec=3
         StandardOutput=journal
@@ -204,50 +209,41 @@ jobs:
         echo "🌐 Configuring nginx..."
         sudo tee /etc/nginx/conf.d/lifeline.conf > /dev/null << NGINX_EOF
         server {
-            listen 80;
+            listen 80 default_server;
             server_name _;
             client_max_body_size 100M;
             
-            # Serve frontend files
+            root /var/www/html/lifeline;
+            index index.html;
+
             location / {
-                root /var/www/html/lifeline;
-                try_files \$uri \$uri/ /index.html;
-                index index.html;
+                try_files $uri /index.html;
             }
             
-            # API routes
-            location /api/ {
+            location /api {
                 proxy_pass http://127.0.0.1:8000;
-                proxy_http_version 1.1;
-                proxy_set_header Upgrade \$http_upgrade;
-                proxy_set_header Connection 'upgrade';
-                proxy_set_header Host \$host;
-                proxy_set_header X-Real-IP \$remote_addr;
-                proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                proxy_set_header X-Forwarded-Proto \$scheme;
-                proxy_cache_bypass \$http_upgrade;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
             }
             
-            # Django admin
-            location /admin/ {
+            location /admin {
                 proxy_pass http://127.0.0.1:8000;
-                proxy_http_version 1.1;
-                proxy_set_header Host \$host;
-                proxy_set_header X-Real-IP \$remote_addr;
-                proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                proxy_set_header X-Forwarded-Proto \$scheme;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
             }
             
-            # Static files
             location /static/ {
                 alias /home/ec2-user/lifeline/current/backend/LifeLine/staticfiles/;
-                expires 1y;
-                add_header Cache-Control "public, immutable";
             }
         }
         NGINX_EOF
         
-        # Remove default nginx config
+        # Remove default nginx config to prevent conflicts
+        sudo rm -f /etc/nginx/sites-enabled/default
         sudo rm -f /etc/nginx/conf.d/default.conf
         
         # Test nginx configuration
