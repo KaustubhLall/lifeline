@@ -14,7 +14,7 @@ function Login({ onLogin, onSwitchToSignup }) {
     setIsLoading(true);
 
     try {
-      const loginUrl = `${config.API_URL}/api/login/`;
+      const loginUrl = `${config.API_URL}/login/`;
 
       const response = await fetch(loginUrl, {
         method: 'POST',

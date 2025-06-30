@@ -46,7 +46,10 @@ export function useSpeechToText(authenticated) {
 
     // Start or stop recording and return transcribed text
     const handleSTT = useCallback(async () => {
+        console.log('handleSTT called in useSpeechToText hook', { sttSupported, sttActive });
+
         if (!sttSupported) {
+            console.log('STT not supported, showing error');
             // Provide guidance when unsupported or insecure
             const isMobileSafari = /iPhone|iPad/.test(navigator.userAgent) && /Safari/.test(navigator.userAgent);
             const isHTTPS = window.location.protocol === 'https:';
@@ -63,6 +66,7 @@ export function useSpeechToText(authenticated) {
         }
 
         if (sttActive) {
+            console.log('Stopping active recording');
             // Stop ongoing recording
             const recorder = recognitionRef.current;
             if (recorder?.state === 'recording') recorder.stop();
@@ -70,6 +74,9 @@ export function useSpeechToText(authenticated) {
             isRecordingRef.current = false;
             return null;
         }
+
+        console.log('Starting new recording...');
+        setSttActive(true);
 
         try {
             // Request or reuse media stream
@@ -148,6 +155,7 @@ export function useSpeechToText(authenticated) {
             });
 
         } catch (e) {
+            console.error('Media access error:', e);
             // Handle media access errors
             setSttActive(false);
             isRecordingRef.current = false;
