@@ -6,6 +6,29 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:  # Allow manual triggering
+    inputs:
+      branch:
+        description: 'Branch to deploy'
+        required: true
+        default: 'main'
+        type: choice
+        options:
+          - main
+          - develop
+          - staging
+      environment:
+        description: 'Deployment environment'
+        required: false
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+      skip_tests:
+        description: 'Skip running tests'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   deploy:
