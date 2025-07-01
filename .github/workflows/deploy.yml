@@ -83,7 +83,8 @@ jobs:
         ssh -i private_key ${USER_NAME}@${SSH_TARGET} 'echo "DJANGO_SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}" | sudo tee /etc/lifeline.env && echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" | sudo tee -a /etc/lifeline.env && sudo chmod 644 /etc/lifeline.env'
         
         # Create systemd service
-        ssh -i private_key ${USER_NAME}@${SSH_TARGET} 'echo "[Unit]
+        ssh -i private_key ${USER_NAME}@${SSH_TARGET} 'cat << EOF | sudo tee /etc/systemd/system/lifeline-backend.service
+        [Unit]
         Description=LifeLine Django Backend
         After=network.target
         
@@ -96,7 +97,8 @@ jobs:
         Restart=always
         
         [Install]
-        WantedBy=multi-user.target" | sudo tee /etc/systemd/system/lifeline-backend.service'
+        WantedBy=multi-user.target
+        EOF'
         
         # Check if HOSTNAME is an IP address or domain and configure SSL accordingly
         ssh -i private_key ${USER_NAME}@${SSH_TARGET} 'if [[ ${HOSTNAME} =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
