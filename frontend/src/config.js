@@ -48,8 +48,11 @@ const getApiUrl = () => {
         return apiUrl;
     }
 
-    // For production, use HTTPS and standard API path
-    return `https://${hostname}/api`;
+    // For production, we need HTTPS for voice features (getUserMedia requirement)
+    // Always use HTTPS in production for microphone access
+    const apiUrl = `https://${hostname}/api`;
+    console.log('Production API URL (HTTPS required for voice):', apiUrl);
+    return apiUrl;
 };
 
 const config = {
