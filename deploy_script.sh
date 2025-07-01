@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────
 #  LifeLine – EC2 one-shot deploy (Amazon Linux 2023)
-#    FRONTEND build   arrives in /tmp/frontend_build/
-#    BACKEND code     arrives in /tmp/backend/
+# ─────────────────────────────────────────────────────────────
+#  • Front-end build copied   → /tmp/frontend_build/
+#  • Back-end source copied   → /tmp/backend/
 #
-#  Required env-vars (exported by caller / GitHub Actions):
-#    HOSTNAME            lifeline-kaus.duckdns.org
-#    DJANGO_SECRET_KEY   <secret>
-#    OPENAI_API_KEY      <secret>
+#  Required env-vars (exported by GitHub Actions):
+#     HOSTNAME            lifeline-kaus.duckdns.org
+#     DJANGO_SECRET_KEY   <secret>
+#     OPENAI_API_KEY      <secret>
 #  Optional:
-#    LETSENCRYPT_EMAIL   you@example.com  (default admin@${HOSTNAME})
+#     LETSENCRYPT_EMAIL   you@example.com  (default admin@${HOSTNAME})
 # ─────────────────────────────────────────────────────────────
 set -euo pipefail
 
-# ─┐ 0. Validate env-vars & derive www-alias
+# ─┐ 0. Validate env-vars & derive www alias
 # ─┴───────────────────────────────────────────────────────────
 : "${HOSTNAME:?HOSTNAME not set}"
 : "${DJANGO_SECRET_KEY:?DJANGO_SECRET_KEY not set}"
@@ -21,14 +22,14 @@ set -euo pipefail
 LE_EMAIL="${LETSENCRYPT_EMAIL:-admin@${HOSTNAME}}"
 WWW_HOST="www.${HOSTNAME}"
 
-echo ">>> Deploying LifeLine to ${HOSTNAME}"
+echo ">>> Deploying LifeLine → ${HOSTNAME}"
 
-# ─┐ 1. Stop running services (ignore if absent)
+# ─┐ 1. Stop running services
 # ─┴───────────────────────────────────────────────────────────
 sudo systemctl stop lifeline-backend || true
 sudo systemctl stop nginx           || true
 
-# ─┐ 2. OS packages
+# ─┐ 2. System packages (curl/openssl already shipped on AL2023)
 # ─┴───────────────────────────────────────────────────────────
 sudo yum install -y python3-pip certbot-nginx bind-utils rsync
 
@@ -82,7 +83,7 @@ Restart=always
 WantedBy=multi-user.target
 EOF
 
-# ─┐ 7. HTTP-only Nginx vhost (needed for Certbot)
+# ─┐ 7. HTTP-only Nginx vhost (for ACME challenge)
 # ─┴───────────────────────────────────────────────────────────
 sudo tee /etc/nginx/conf.d/lifeline.conf >/dev/null <<EOF
 server {
@@ -105,21 +106,20 @@ server {
 }
 EOF
 
-# ─┐ 8. Ensure DNS already points to this EC2
+# ─┐ 8. DNS must already point to this EC2
 # ─┴───────────────────────────────────────────────────────────
 PUB_IP=$(curl -s http://checkip.amazonaws.com/)
 GOOGLE=$(dig +short "${HOSTNAME}" @8.8.8.8 | head -n1)
 CFDNS=$(dig +short "${HOSTNAME}" @1.1.1.1 | head -n1)
 if [[ "$PUB_IP" != "$GOOGLE" || "$PUB_IP" != "$CFDNS" ]]; then
-  echo "DNS for ${HOSTNAME} has not propagated to ${PUB_IP}. Abort."
-  exit 1
+  echo "DNS for ${HOSTNAME} not propagated. Abort."; exit 1
 fi
 
 # ─┐ 9. Start Nginx (HTTP) for ACME challenge
 # ─┴───────────────────────────────────────────────────────────
 sudo systemctl restart nginx
 
-# ─┐10. Remove placeholder certs & issue real multi-SAN cert
+# ─┐10. Remove placeholder certs & issue multi-SAN cert
 # ─┴───────────────────────────────────────────────────────────
 sudo rm -rf /etc/letsencrypt/live/\$HOSTNAME /etc/letsencrypt/archive/\$HOSTNAME 2>/dev/null || true
 sudo certbot delete --cert-name '$HOSTNAME' 2>/dev/null || true
@@ -129,17 +129,15 @@ sudo certbot --nginx \
      --non-interactive --agree-tos --email "${LE_EMAIL}" \
      --redirect --force-renewal
 
-# ─┐11. Final HTTPS vhost (both names)
+# ─┐11. Final HTTPS vhost (variables expand!)
 # ─┴───────────────────────────────────────────────────────────
 sudo tee /etc/nginx/conf.d/lifeline.conf >/dev/null <<EOF
-# Redirect HTTP → HTTPS
 server {
     listen 80;
     server_name ${HOSTNAME} ${WWW_HOST};
     return 301 https://\$host\$request_uri;
 }
 
-# HTTPS
 server {
     listen 443 ssl;
     http2 on;
@@ -148,7 +146,6 @@ server {
     ssl_certificate     /etc/letsencrypt/live/${HOSTNAME}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${HOSTNAME}/privkey.pem;
 
-    # Security
     ssl_session_cache   shared:SSL:10m;
     ssl_session_timeout 1d;
     ssl_protocols       TLSv1.2 TLSv1.3;
@@ -170,14 +167,19 @@ server {
 }
 EOF
 
-# ─┐12. Normalise listen/http2 directive & purge le-ssl stubs
+# Guard: abort if placeholders survived
+if grep -q '\$HOSTNAME\|\$WWW_HOST' /etc/nginx/conf.d/lifeline.conf; then
+  echo "ERROR: Placeholder variables still present in vhost. Aborting."; exit 1
+fi
+
+# ─┐12. Normalise listen/http2 & purge le-ssl stubs
 # ─┴───────────────────────────────────────────────────────────
 sudo rm -f /etc/nginx/conf.d/*-le-ssl.conf /etc/nginx/conf.d/*.save
 sudo sed -Ei 's#listen[[:space:]]+443[[:space:]]+ssl[[:space:]]+http2;#listen 443 ssl;\n    http2 on;#' \
        /etc/nginx/conf.d/lifeline.conf
 sudo nginx -t
 
-# ─┐13. Certbot auto-renew
+# ─┐13. Enable certbot auto-renew
 # ─┴───────────────────────────────────────────────────────────
 sudo systemctl enable --now certbot-renew.timer
 
@@ -188,7 +190,7 @@ sudo systemctl enable lifeline-backend
 sudo systemctl restart lifeline-backend
 sudo systemctl reload nginx
 
-# ─┐15. Health check over HTTPS
+# ─┐15. Health check (HTTPS)
 # ─┴───────────────────────────────────────────────────────────
 curl -skf https://${HOSTNAME}/api/healthz >/dev/null
 echo ">>> Deployment successful 🎉"
