@@ -68,8 +68,12 @@ frontend/src/
 - Python 3.8+
 - Node.js 14+
 - OpenAI API key
+- AWS EC2 instance (for production deployment)
+- Domain name or free subdomain (recommended for trusted SSL)
 
-### Backend Setup
+### Local Development Setup
+
+#### Backend Setup
 
 1. **Clone the repository**
    ```bash
@@ -89,26 +93,38 @@ frontend/src/
    ```
 
 4. **Environment variables**
-   Create a `.env` file in the backend directory:
+   Create a `.env` file in the backend/LifeLine directory:
    ```env
    OPENAI_API_KEY=your_openai_api_key_here
-   DJANGO_SECRET_KEY=your_django_secret_key
+   DJANGO_SECRET_KEY=your_django_secret_key_here
    DEBUG=True
+   ALLOWED_HOSTS=localhost,127.0.0.1
    ```
 
 5. **Database setup**
    ```bash
    cd LifeLine
    python manage.py migrate
+   python manage.py collectstatic --noinput
+   ```
+
+6. **Create Django superuser (for admin access)**
+   ```bash
    python manage.py createsuperuser
    ```
+   Follow the prompts to create an admin username, email, and password.
 
-6. **Run the server**
+7. **Run development server**
    ```bash
-   python manage.py runserver
+   python manage.py runserver 8000
    ```
 
-### Frontend Setup
+8. **Access Django Admin**
+   - Admin Interface: http://localhost:8000/admin
+   - Login with your superuser credentials
+   - Manage users, conversations, messages, and memories
+
+#### Frontend Setup
 
 1. **Navigate to frontend directory**
    ```bash
@@ -121,170 +137,217 @@ frontend/src/
    ```
 
 3. **Configure API endpoint**
-   Update `src/config.js` with your backend URL:
+   Update `src/config.js` if needed:
    ```javascript
    const config = {
-     API_URL: 'http://localhost:8000/api'
+     API_BASE_URL: process.env.NODE_ENV === 'production' 
+       ? '/api' 
+       : 'http://localhost:8000/api'
    };
-   export default config;
    ```
 
-4. **Run the development server**
+4. **Run development server**
    ```bash
    npm start
    ```
 
-The application will be available at `http://localhost:3000`
+5. **Access the application**
+   - Frontend: http://localhost:3000
+   - Backend API: http://localhost:8000/api
+
+## 🌐 Production Deployment
+
+### Option 1: Deploy with IP Address (Quick Testing)
+
+1. **Set up GitHub Secrets**
+   Go to your repository → Settings → Secrets and variables → Actions:
+   - `EC2_SSH_PRIVATE_KEY`: Your EC2 private key
+   - `EC2_HOSTNAME`: Your EC2 public IP address
+   - `EC2_USER_NAME`: `ec2-user` (for Amazon Linux)
+   - `DJANGO_SECRET_KEY`: Generate with `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"`
+   - `OPENAI_API_KEY`: Your OpenAI API key
+
+2. **EC2 Security Groups**
+   Ensure your EC2 instance allows:
+   - HTTP (port 80) from anywhere
+   - HTTPS (port 443) from anywhere
+   - SSH (port 22) from your IP
+
+3. **Deploy**
+   - Push to main branch or manually trigger GitHub Action
+   - Access via `https://your-ec2-ip` (will show SSL warning)
+
+### Option 2: Deploy with Trusted SSL (Recommended)
+
+#### Step 1: Get a Free Domain
+
+**Using DuckDNS (Recommended):**
+1. Go to https://www.duckdns.org/
+2. Sign in with Google/GitHub
+3. Create a subdomain: `lifeline-yourname.duckdns.org`
+4. Point it to your EC2 public IP address
+5. Copy your DuckDNS token
+
+**Alternative Free DNS Services:**
+- **No-IP**: https://www.noip.com/ (30 hostnames free)
+- **FreeDNS**: https://freedns.afraid.org/ (completely free)
+- **Dynu**: https://www.dynu.com/ (4 hostnames free)
+
+#### Step 2: Update GitHub Secrets
+
+1. **Update existing secrets:**
+   - Change `EC2_HOSTNAME` from IP to your domain: `lifeline-yourname.duckdns.org`
+
+2. **Optional: Add DuckDNS auto-update (for dynamic IPs):**
+   - `DUCKDNS_TOKEN`: Your DuckDNS token (if using DuckDNS)
+
+#### Step 3: Deploy
+
+1. **Push your code** or manually trigger the GitHub Action
+2. **Wait for deployment** (takes 3-5 minutes)
+3. **Access your app** at `https://lifeline-your-name.duckdns.org`
+
+### Deployment Features
+
+The deployment script automatically:
+- ✅ **Detects IP vs Domain**: Uses appropriate SSL certificate method
+- ✅ **Let's Encrypt SSL**: Automatic trusted certificates for domains
+- ✅ **Self-signed SSL**: Fallback for IP addresses
+- ✅ **Auto-renewal**: Certificates automatically renew before expiration
+- ✅ **HTTPS Redirect**: All HTTP traffic redirected to HTTPS
+- ✅ **Service Management**: Systemd services for backend and nginx
+- ✅ **Error Handling**: Comprehensive logging and debugging
+
+### Production Django Admin Access
+
+After deployment, you'll need to create a superuser on your EC2 instance:
+
+1. **SSH into your EC2 instance**
+   ```bash
+   ssh -i your-key.pem ec2-user@your-domain-or-ip
+   ```
+
+2. **Create superuser**
+   ```bash
+   cd /home/ec2-user/lifeline/backend/LifeLine
+   source /home/ec2-user/lifeline/venv/bin/activate
+   python manage.py createsuperuser
+   ```
+
+3. **Access production admin**
+   - Admin Interface: `https://your-domain-or-ip/admin`
+   - Login with your superuser credentials
+   - Manage production users, conversations, and memories
+
+**What you can do in Django Admin:**
+- 👥 **User Management**: View registered users, reset passwords, manage permissions
+- 💬 **Conversations**: Browse all user conversations, delete inappropriate content
+- 📝 **Messages**: View chat messages, monitor API usage
+- 🧠 **Memories**: Inspect extracted memories, debug memory extraction
+- 🔧 **System Monitoring**: Check database health, view logs
 
 ## 🔧 Configuration
 
-### AI Models
-The application supports multiple OpenAI models:
-- **GPT-4.1 Nano**: Fast, cost-effective for general conversations
-- **GPT-4o Mini**: Balanced performance and cost
-- **GPT-4o**: High-quality responses with multimodal capabilities
-- **GPT-4.1**: Most advanced reasoning capabilities
+### Environment Variables
 
-### Chat Modes
-- **Conversational**: General friendly conversation with memory
-- **Coaching**: Goal-oriented coaching and personal development
-- **Therapeutic**: Emotional support (not professional therapy)
-- **Productivity**: Work efficiency and time management
-- **Creative**: Creative projects and brainstorming
+#### Backend (.env or GitHub Secrets)
+```env
+# Required
+OPENAI_API_KEY=sk-your-openai-key
+DJANGO_SECRET_KEY=your-secret-key
 
-### Memory System
-The AI automatically extracts and stores:
-- **Personal Information**: Names, locations, relationships
-- **Preferences**: Likes, dislikes, interests
-- **Goals**: Objectives and aspirations
-- **Insights**: Important learnings and realizations
-- **Context**: Situational information for continuity
-
-## 📊 Memory & RAG System
-
-### Automatic Memory Extraction
-- Uses GPT-4o Mini to analyze conversations
-- Extracts memorable information with confidence scoring
-- Generates vector embeddings for semantic search
-- Tracks importance scores and access patterns
-
-### Enhanced Retrieval
-- **Semantic Search**: Cosine similarity matching
-- **Context Reranking**: Dynamic relevance scoring
-- **Multi-factor Scoring**: Combines similarity, importance, and recency
-- **Conversation Memory**: Maintains session-specific context
-
-### Memory Types & Scoring
-- **Importance Score**: 0.0 to 1.0 based on significance
-- **Access Tracking**: Frequency and recency of use
-- **Confidence Scoring**: Auto-extraction reliability
-- **Tag System**: Categorization and organization
-
-## 🎙️ Speech-to-Text Features
-
-### Audio Processing
-- **Real-time Recording**: Browser-based audio capture
-- **Format Support**: WebM, WAV, MP4, OGG
-- **Quality Optimization**: Echo cancellation, noise suppression
-- **Mobile Compatibility**: iOS and Android support
-
-### Transcription
-- **OpenAI Whisper**: High-accuracy speech recognition
-- **Multiple Languages**: Automatic language detection
-- **Error Handling**: Graceful fallback for unsupported browsers
-- **Security**: HTTPS required for microphone access
-
-## 🔐 Security & Privacy
-
-### Authentication
-- **Token-based Auth**: Secure API authentication
-- **User Isolation**: Complete data separation between users
-- **Session Management**: Automatic token refresh
-
-### Data Protection
-- **Encrypted Storage**: Secure database storage
-- **API Security**: Rate limiting and input validation
-- **Memory Privacy**: User-specific memory isolation
-- **Audit Logging**: Comprehensive request logging
-
-## 🛠️ API Endpoints
-
-### Authentication
-- `POST /api/register/` - User registration
-- `POST /api/login/` - User login
-
-### Conversations
-- `GET /api/conversations/` - List conversations
-- `POST /api/conversations/` - Create conversation
-- `GET /api/conversations/{id}/` - Get conversation details
-- `PATCH /api/conversations/{id}/` - Update conversation
-- `DELETE /api/conversations/{id}/` - Delete conversation
-
-### Messages
-- `GET /api/conversations/{id}/messages/` - List messages
-- `POST /api/conversations/{id}/messages/` - Send message
-
-### Memory Management
-- `GET /api/memories/` - List memories
-- `POST /api/memories/` - Create memory
-- `GET /api/memories/{id}/` - Get memory details
-- `PATCH /api/memories/{id}/` - Update memory
-- `DELETE /api/memories/{id}/` - Delete memory
-
-### Audio Processing
-- `POST /api/transcribe/` - Transcribe audio to text
-
-## 🔍 Advanced Features
-
-### Enhanced Prompt Engineering
-- **Dynamic System Prompts**: Mode-specific instructions
-- **Memory Integration**: Contextual memory insertion
-- **Conversation History**: Token-aware history management
-- **User Personalization**: Name and preference integration
-
-### Performance Optimization
-- **Background Processing**: Async memory extraction
-- **Token Counting**: Efficient context management
-- **Caching**: Memory and conversation caching
-- **Pagination**: Efficient data loading
-
-### Error Handling
-- **Budget Management**: API quota monitoring
-- **Model Fallbacks**: Graceful model switching
-- **Network Resilience**: Retry mechanisms
-- **User Feedback**: Clear error messages
-
-## 🎨 Customization
-
-### Adding New Chat Modes
-1. Add mode to `SYSTEM_PROMPTS` in `utils/prompts.py`
-2. Update frontend `chatModes` array in `App.js`
-3. Implement mode-specific logic if needed
-
-### Memory Types
-Extend the `MEMORY_TYPES` in `models/chat.py`:
-```python
-MEMORY_TYPES = [
-    ('personal', 'Personal Information'),
-    ('preference', 'User Preference'),
-    ('goal', 'Goal or Objective'),
-    # Add your custom types here
-]
+# Optional
+DEBUG=False                    # Set to True for development
+ALLOWED_HOSTS=yourdomain.com   # Your domain or IP
+DATABASE_URL=sqlite:///db.sqlite3  # Default SQLite
 ```
 
-## 📈 Monitoring & Analytics
+#### Frontend (config.js)
+```javascript
+const config = {
+  API_BASE_URL: process.env.NODE_ENV === 'production' 
+    ? '/api'  // Production: served by nginx
+    : 'http://localhost:8000/api',  // Development
+  
+  // Speech-to-text settings
+  STT_ENABLED: true,
+  STT_LANGUAGE: 'en-US',
+  
+  // Chat settings
+  DEFAULT_MODEL: 'gpt-4o-mini',
+  MAX_MESSAGE_LENGTH: 4000
+};
+```
 
-### Logging
-- **Comprehensive Logging**: All API calls and errors
-- **Memory Tracking**: Extraction and retrieval metrics
-- **Performance Monitoring**: Response times and token usage
-- **User Activity**: Conversation and memory patterns
+### AI Model Configuration
 
-### Metrics
-- **Memory Statistics**: Extraction success rates
-- **Model Performance**: Response quality metrics
-- **Usage Patterns**: User engagement analytics
-- **Error Rates**: System reliability monitoring
+Available models in `backend/LifeLine/api/utils/llm.py`:
+- `gpt-4o`: Most capable, higher cost
+- `gpt-4o-mini`: Balanced performance and cost (default)
+- `gpt-4-turbo`: Previous generation, still powerful
+- `gpt-3.5-turbo`: Fastest, most economical
+
+### Memory System Configuration
+
+Memory extraction settings in `backend/LifeLine/api/utils/memory_utils.py`:
+- **Memory Types**: Personal, Preferences, Goals, Insights, Facts, Context
+- **Extraction Threshold**: Minimum conversation length for memory extraction
+- **Similarity Threshold**: Vector similarity cutoff for memory retrieval
+- **Max Memories**: Maximum number of memories to include in context
+
+## 🔍 Troubleshooting
+
+### Common Issues
+
+**SSL Certificate Issues:**
+- Ensure your domain points to your EC2 IP
+- Check port 80 is accessible for Let's Encrypt verification
+- Wait 2-3 minutes after DNS changes before deploying
+
+**Voice Input Not Working:**
+- HTTPS is required for microphone access
+- Check browser microphone permissions
+- Ensure you're not using localhost in production
+
+**Backend API Errors:**
+- Check Django logs: `sudo journalctl -u lifeline-backend -f`
+- Verify environment variables are set correctly
+- Ensure OpenAI API key is valid and has credits
+
+**Frontend Not Loading:**
+- Check nginx logs: `sudo tail -f /var/log/nginx/error.log`
+- Verify file permissions: `ls -la /home/ec2-user/lifeline/frontend/`
+- Confirm nginx is serving files from correct directory
+
+### Debugging Commands
+
+**Check service status:**
+```bash
+sudo systemctl status lifeline-backend
+sudo systemctl status nginx
+```
+
+**View logs:**
+```bash
+# Backend logs
+sudo journalctl -u lifeline-backend -f
+
+# Nginx logs  
+sudo tail -f /var/log/nginx/access.log
+sudo tail -f /var/log/nginx/error.log
+```
+
+**Test SSL certificate:**
+```bash
+sudo certbot certificates
+openssl s_client -connect yourdomain.com:443
+```
+
+**Manual restart services:**
+```bash
+sudo systemctl restart lifeline-backend
+sudo systemctl restart nginx
+```
 
 ## 🤝 Contributing
 
@@ -298,204 +361,18 @@ MEMORY_TYPES = [
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## 🆘 Support
 
-- OpenAI for providing the GPT models and Whisper API
-- Django REST Framework for the robust backend framework
-- React for the dynamic frontend framework
-- The open-source community for various libraries and tools
+- **Issues**: https://github.com/your-repo/lifeline/issues
+- **Documentation**: Check this README and inline code comments
+- **Deployment Help**: See the `setup-duckdns.md` guide for domain setup
 
-## 📞 Support
+## 🔄 Updates
 
-For support and questions:
-- Open an issue on GitHub
-- Check the documentation
-- Review the code comments for implementation details
+The application automatically updates when you push to the main branch. The GitHub Action will:
+1. Build the frontend
+2. Deploy to your EC2 instance
+3. Restart services
+4. Verify deployment health
 
----
-
-**LifeLine** - Where AI remembers, understands, and grows with you.
-
-## 🚀 Deployment
-
-### Prerequisites
-
-Before deploying, ensure you have:
-- AWS EC2 instance running Amazon Linux 2
-- GitHub repository with your code
-- Required GitHub Secrets configured
-- Domain name or public IP address
-
-### GitHub Secrets Setup
-
-Configure these secrets in your GitHub repository (Settings → Secrets and variables → Actions):
-
-| Secret Name | Description | Example |
-|-------------|-------------|---------|
-| `EC2_SSH_PRIVATE_KEY` | Your EC2 private key (.pem file content) | `-----BEGIN RSA PRIVATE KEY-----...` |
-| `EC2_HOSTNAME` | Your EC2 public IP address | `54.144.219.238` |
-| `EC2_USER_NAME` | EC2 username (usually `ec2-user`) | `ec2-user` |
-| `DJANGO_SECRET_KEY` | Django secret key for production | `your-secret-key-here` |
-| `OPENAI_API_KEY` | OpenAI API key for AI features | `sk-...` |
-
-### Deployment Methods
-
-#### Method 1: Manual Trigger (Recommended)
-
-1. **Go to GitHub Actions**:
-   - Navigate to your repository on GitHub
-   - Click the **Actions** tab
-   - Select **Deploy to EC2** workflow
-
-2. **Click "Run workflow"**:
-   - Click the **Run workflow** button
-   - Choose the branch you want to deploy from the dropdown
-   - Click **Run workflow** to start deployment
-
-3. **Monitor Progress**:
-   - Watch the real-time logs in the Actions tab
-   - Each step will show progress and any errors
-
-#### Method 2: Automatic Deployment
-
-The workflow automatically triggers on:
-- **Push to main branch**: `git push origin main`
-- **Push to develop branch**: `git push origin develop`
-- **Pull requests to main**: When you create a PR targeting main
-
-### Deployment Process
-
-The automated deployment performs these steps:
-
-1. **Build Phase**:
-   - Installs Node.js and Python dependencies
-   - Builds React frontend for production
-   - Runs backend tests (optional)
-
-2. **Deploy Phase**:
-   - Copies files to your EC2 instance via SSH
-   - Sets up Python virtual environment
-   - Configures Nginx web server
-   - Creates systemd service for Django backend
-   - Applies database migrations
-
-3. **Health Check**:
-   - Verifies frontend is accessible
-   - Tests backend API endpoints
-   - Confirms all services are running
-
-### Post-Deployment
-
-After successful deployment, your application will be available at:
-
-- **Frontend**: `http://your-ec2-ip/`
-- **Backend API**: `http://your-ec2-ip/api/`
-- **Health Check**: `http://your-ec2-ip/api/health/`
-- **Django Admin**: `http://your-ec2-ip/admin/`
-
-### Troubleshooting Deployment
-
-#### Common Issues
-
-1. **SSH Connection Failed**:
-   ```bash
-   # Check your private key format
-   # Ensure EC2 security group allows SSH (port 22)
-   # Verify the hostname/IP is correct
-   ```
-
-2. **Frontend Build Errors**:
-   ```bash
-   # Ensure package.json and package-lock.json are committed
-   # Check Node.js version compatibility
-   ```
-
-3. **Backend Service Issues**:
-   ```bash
-   # SSH into your EC2 instance to check logs:
-   ssh -i your-key.pem ec2-user@your-ip
-   sudo journalctl -u lifeline-backend -f
-   ```
-
-4. **Nginx Configuration**:
-   ```bash
-   # Check Nginx status and logs:
-   sudo systemctl status nginx
-   sudo tail -f /var/log/nginx/error.log
-   ```
-
-#### Manual Deployment Verification
-
-SSH into your EC2 instance and run:
-
-```bash
-# Check backend service
-sudo systemctl status lifeline-backend
-
-# Check nginx service
-sudo systemctl status nginx
-
-# Test backend API directly
-curl http://localhost:8000/api/health/
-
-# Test frontend
-curl http://localhost/
-```
-
-### Updating Your Deployment
-
-To deploy updates:
-
-1. **Push changes** to your repository
-2. **Trigger deployment** using GitHub Actions
-3. The system will automatically:
-   - Stop existing services
-   - Backup current deployment
-   - Install new version
-   - Restart services
-
-### Rollback Procedure
-
-If deployment fails, you can rollback:
-
-```bash
-# SSH into your EC2 instance
-ssh -i your-key.pem ec2-user@your-ip
-
-# List available backups
-ls -la /home/ec2-user/lifeline/backup-*
-
-# Restore from backup (replace with actual backup timestamp)
-sudo systemctl stop lifeline-backend nginx
-sudo mv /home/ec2-user/lifeline/current /home/ec2-user/lifeline/failed-deployment
-sudo mv /home/ec2-user/lifeline/backup-YYYYMMDD_HHMMSS /home/ec2-user/lifeline/current
-sudo systemctl start lifeline-backend nginx
-```
-
-### Local Development Setup
-
-For local development without deployment:
-
-1. **Backend Setup**:
-   ```bash
-   cd backend
-   pip install -r requirements.txt
-   cd LifeLine
-   python manage.py migrate
-   python manage.py runserver
-   ```
-
-2. **Frontend Setup**:
-   ```bash
-   cd frontend
-   npm install
-   npm start
-   ```
-
-3. **Environment Variables**:
-   Create `.env` file in backend/LifeLine/:
-   ```
-   DJANGO_SECRET_KEY=your-dev-secret-key
-   OPENAI_API_KEY=your-openai-key
-   DEBUG=True
-   ```
+Monitor deployment status in the GitHub Actions tab of your repository.
