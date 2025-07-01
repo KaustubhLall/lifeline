@@ -33,111 +33,28 @@ jobs:
       run: |
         echo "$PRIVATE_KEY" > private_key
         chmod 600 private_key
-        
-        # Stop services and clean up
-        ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} 'sudo systemctl stop lifeline-backend || true; sudo systemctl stop nginx || true; sudo rm -rf /home/ec2-user/lifeline; mkdir -p /home/ec2-user/lifeline'
-        
-        # Copy files to temporary locations
-        scp -i private_key -r frontend/build/* ${USER_NAME}@${HOSTNAME}:/tmp/frontend_build/
-        scp -i private_key -r backend/* ${USER_NAME}@${HOSTNAME}:/tmp/backend/
-        
-        # Move files to proper locations and fix permissions
-        ssh -i private_key ${USER_NAME}@${HOSTNAME} '
-          # Move backend files
-          cp -r /tmp/backend/* /home/ec2-user/lifeline/backend/
-          
-          # Move frontend files
-          mkdir -p /home/ec2-user/lifeline/frontend
-          cp -r /tmp/frontend_build/* /home/ec2-user/lifeline/frontend/
-          
-          # Fix critical permission issues that cause 500 errors
-          chmod 755 /home/ec2-user
-          chmod 755 /home/ec2-user/lifeline
-          chmod -R 755 /home/ec2-user/lifeline/frontend
-          
-          # Clean up temp files
-          rm -rf /tmp/frontend_build /tmp/backend
-        '
-        
-        # Install and configure Python dependencies
-        ssh -i private_key ${USER_NAME}@${HOSTNAME} 'cd /home/ec2-user/lifeline && python3 -m venv venv && source venv/bin/activate && pip install -r backend/requirements.txt && pip install gunicorn'
-        
-        # Django setup
-        ssh -i private_key ${USER_NAME}@${HOSTNAME} 'cd /home/ec2-user/lifeline/backend/LifeLine && source /home/ec2-user/lifeline/venv/bin/activate && DJANGO_SECRET_KEY='"'"'${{ secrets.DJANGO_SECRET_KEY }}'"'"' OPENAI_API_KEY='"'"'${{ secrets.OPENAI_API_KEY }}'"'"' python manage.py migrate && DJANGO_SECRET_KEY='"'"'${{ secrets.DJANGO_SECRET_KEY }}'"'"' OPENAI_API_KEY='"'"'${{ secrets.OPENAI_API_KEY }}'"'"' python manage.py collectstatic --noinput'
-        
-        # Create environment file for systemd
-        ssh -i private_key ${USER_NAME}@${HOSTNAME} 'echo "DJANGO_SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}" | sudo tee /etc/lifeline.env && echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" | sudo tee -a /etc/lifeline.env && sudo chmod 644 /etc/lifeline.env'
-        
-        # Create systemd service
-        ssh -i private_key ${USER_NAME}@${HOSTNAME} 'echo "[Unit]
-        Description=LifeLine Django Backend
-        After=network.target
-        
-        [Service]
-        Type=simple
-        User=ec2-user
-        WorkingDirectory=/home/ec2-user/lifeline/backend/LifeLine
-        EnvironmentFile=/etc/lifeline.env
-        ExecStart=/home/ec2-user/lifeline/venv/bin/gunicorn LifeLine.wsgi:application --bind 0.0.0.0:8000
-        Restart=always
-        
-        [Install]
-        WantedBy=multi-user.target" | sudo tee /etc/systemd/system/lifeline-backend.service'
-        
-        # Create nginx config with proper HTTPS setup for voice features
-        ssh -i private_key ${USER_NAME}@${HOSTNAME} 'sudo mkdir -p /etc/ssl/private /etc/ssl/certs && sudo yum install -y openssl && sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/lifeline.key -out /etc/ssl/certs/lifeline.crt -subj "/C=US/ST=State/L=City/O=LifeLine/CN=44.205.249.20"'
-        
-        ssh -i private_key ${USER_NAME}@${HOSTNAME} 'echo "# Redirect HTTP to HTTPS for voice features
-        server {
-            listen 80;
-            server_name _;
-            return 301 https://\$server_name\$request_uri;
-        }
-        
-        server {
-            listen 443 ssl http2;
-            server_name _;
-            
-            # SSL Configuration for voice features
-            ssl_certificate /etc/ssl/certs/lifeline.crt;
-            ssl_certificate_key /etc/ssl/private/lifeline.key;
-            ssl_protocols TLSv1.2 TLSv1.3;
-            ssl_ciphers HIGH:!aNULL:!MD5;
-            ssl_prefer_server_ciphers on;
-            
-            # Security headers for HTTPS
-            add_header Strict-Transport-Security \"max-age=31536000; includeSubDomains\" always;
-            add_header X-Frame-Options DENY;
-            add_header X-Content-Type-Options nosniff;
-            
-            root /home/ec2-user/lifeline/frontend;
-            index index.html;
-            
-            location / {
-                try_files \$uri \$uri/ /index.html;
-            }
-        
-            location /api {
-                proxy_pass http://127.0.0.1:8000;
-                proxy_set_header Host \$host;
-                proxy_set_header X-Real-IP \$remote_addr;
-                proxy_set_header X-Forwarded-Proto \$scheme;
-                proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                proxy_set_header X-Forwarded-Host \$server_name;
-            }
-        }" | sudo tee /etc/nginx/conf.d/lifeline.conf'
-                
-                # Remove default nginx config that might conflict
-                ssh -i private_key ${USER_NAME}@${HOSTNAME} 'sudo rm -f /etc/nginx/conf.d/default.conf /etc/nginx/sites-enabled/default'
-                
-                # Test nginx config before starting
-                ssh -i private_key ${USER_NAME}@${HOSTNAME} 'sudo nginx -t'
-                
-                # Start services
-                ssh -i private_key ${USER_NAME}@${HOSTNAME} 'sudo systemctl daemon-reload && sudo systemctl enable lifeline-backend && sudo systemctl start lifeline-backend && sudo systemctl enable nginx && sudo systemctl start nginx'
-                
-                # Fix frontend permissions on EC2
-                ssh -i private_key ${USER_NAME}@${HOSTNAME} 'sudo chown -R nginx:nginx /home/ec2-user/lifeline/frontend && sudo chmod -R 755 /home/ec2-user/lifeline/frontend'
-                
-                # Check if services are running and debug issues
-                ssh -i private_key ${USER_NAME}@${HOSTNAME} 'echo "=== Service Status ===" && sudo systemctl is-active lifeline-backend && sudo systemctl is-active nginx && echo "=== Port Check ===" && sudo netstat -tulpn | grep -E ":(80|8000)" && echo "=== Test Django API health ===" && curl -s http://localhost:8000/api/health/ && echo "=== Test nginx ===" && curl -I http://localhost:80 && echo "=== Frontend files check ===" && ls -la /home/ec2-user/lifeline/frontend/ && echo "=== Nginx error log ===" && sudo tail -n 10 /var/log/nginx/error.log'
+
+        # Step 1: Resolve Hostname to IP
+        echo "Resolving ${HOSTNAME}..."
+        SSH_TARGET=$(dig @1.1.1.1 +short ${HOSTNAME} | head -n1)
+        if [[ -z "$SSH_TARGET" ]]; then
+          echo "DNS resolution failed. Please check that ${HOSTNAME} points to your EC2 IP and try again in 5 minutes."
+          exit 1
+        fi
+        echo "Connecting to ${HOSTNAME} (${SSH_TARGET})"
+
+        # Step 2: Copy files and deployment script to EC2
+        echo "--- Copying files to EC2 ---"
+        scp -o StrictHostKeyChecking=no -i private_key -r frontend/build/* ${USER_NAME}@${SSH_TARGET}:/tmp/frontend_build/
+        scp -o StrictHostKeyChecking=no -i private_key -r backend/* ${USER_NAME}@${SSH_TARGET}:/tmp/backend/
+        scp -o StrictHostKeyChecking=no -i private_key deploy_script.sh ${USER_NAME}@${SSH_TARGET}:/home/ec2-user/
+
+        # Step 3: Execute the deployment script on EC2
+        echo "--- Executing deployment script on EC2 ---"
+        ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${SSH_TARGET} "\
+          chmod +x /home/ec2-user/deploy_script.sh && \
+          export DJANGO_SECRET_KEY='${{ secrets.DJANGO_SECRET_KEY }}' && \
+          export OPENAI_API_KEY='${{ secrets.OPENAI_API_KEY }}' && \
+          export HOSTNAME='${HOSTNAME}' && \
+          /home/ec2-user/deploy_script.sh
+        "
