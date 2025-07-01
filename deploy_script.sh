@@ -118,10 +118,47 @@ sleep 5 # Give Nginx a moment to start
 echo "--- Obtaining SSL certificate from Let's Encrypt ---"
 sudo certbot --nginx -d $HOSTNAME --non-interactive --agree-tos --email admin@lifeline.com --redirect
 
-# Certbot automatically creates the final Nginx config. We just need to ensure it's correct.
-# The final config will handle HTTPS and proxying to the Django app.
+# --- 8. Create Final Nginx Configuration ---
+echo "--- Creating final Nginx configuration ---"
+sudo tee /etc/nginx/conf.d/lifeline.conf > /dev/null <<EOT
+server {
+    listen 80;
+    server_name \$HOSTNAME;
+    # Redirect all HTTP requests to HTTPS
+    return 301 https://\$host\$request_uri;
+}
 
-# --- 8. Start all services ---
+server {
+    listen 443 ssl http2;
+    server_name \$HOSTNAME;
+
+    # SSL configuration from Certbot
+    ssl_certificate /etc/letsencrypt/live/\$HOSTNAME/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/\$HOSTNAME/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    # Root for React frontend
+    root /home/ec2-user/lifeline/frontend;
+    index index.html;
+
+    # Handle React routing
+    location / {
+        try_files \$uri /index.html;
+    }
+
+    # Proxy API requests to Django backend
+    location /api {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+EOT
+
+# --- 9. Start all services ---
 echo "--- Starting all services ---"
 sudo systemctl daemon-reload
 sudo systemctl restart nginx
@@ -130,7 +167,7 @@ sudo systemctl start lifeline-backend
 
 echo "--- Deployment successful! ---"
 
-# --- 9. Final Health Check ---
+# --- 10. Final Health Check ---
 echo "--- Performing Final Health Checks ---"
 echo "--- Nginx Status ---"
 sudo systemctl status nginx --no-pager || echo "Nginx failed to start"
