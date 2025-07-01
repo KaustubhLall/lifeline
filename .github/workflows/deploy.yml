@@ -34,24 +34,16 @@ jobs:
         echo "$PRIVATE_KEY" > private_key
         chmod 600 private_key
         
-        # Resolve hostname to IP for SSH connections (handles DNS issues)
-        if [[ ${HOSTNAME} =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-          SSH_TARGET=${HOSTNAME}
-          echo "Using IP address: ${SSH_TARGET}"
-        else
-          echo "Resolving domain: ${HOSTNAME}"
-          SSH_TARGET=$(nslookup ${HOSTNAME} | grep -A1 "Non-authoritative answer:" | grep "Address:" | tail -1 | awk '{print $2}')
-          if [[ -z "$SSH_TARGET" ]] || [[ "$SSH_TARGET" == "" ]]; then
-            echo "DNS resolution failed, trying dig..."
-            SSH_TARGET=$(dig +short ${HOSTNAME} | head -n1)
-          fi
-          if [[ -z "$SSH_TARGET" ]] || [[ "$SSH_TARGET" == "" ]]; then
-            echo "ERROR: Could not resolve ${HOSTNAME} to IP address"
-            echo "Please check your DNS settings and try again"
-            exit 1
-          fi
-          echo "Resolved ${HOSTNAME} to IP: ${SSH_TARGET}"
+        # Simple DNS resolution - try Cloudflare DNS first (usually fastest to update)
+        echo "Resolving ${HOSTNAME}..."
+        SSH_TARGET=$(dig @1.1.1.1 +short ${HOSTNAME} | head -n1)
+        
+        if [[ -z "$SSH_TARGET" ]] || [[ ! "$SSH_TARGET" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "DNS resolution failed. Please check that ${HOSTNAME} points to your EC2 IP and try again in 5 minutes."
+          exit 1
         fi
+        
+        echo "Connecting to ${HOSTNAME} (${SSH_TARGET})"
         
         # Stop services and clean up
         ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${SSH_TARGET} 'sudo systemctl stop lifeline-backend || true; sudo systemctl stop nginx || true; sudo rm -rf /home/ec2-user/lifeline; mkdir -p /home/ec2-user/lifeline'
