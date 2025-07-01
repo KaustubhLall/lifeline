@@ -213,3 +213,28 @@ sudo systemctl reload nginx
 # ─────────────────────────────────────────────────────────────
 curl -skf https://${HOSTNAME}/api/healthz >/dev/null
 echo ">>> Deployment successful 🎉"
+
+# ── FINAL hard-fix for placeholder & http2 syntax ──────────────
+REAL=${HOSTNAME}                        # resolved domain at runtime
+
+# 1) Replace any literal $HOSTNAME or \$HOSTNAME with the real host name
+sudo sed -i -E "s/\\\$?HOSTNAME/${REAL//\//\\/}/g" \
+    /etc/nginx/conf.d/lifeline.conf
+
+# 2) Turn “listen 443 ssl http2;” → “listen 443 ssl;”
+#    Remove *all* existing “http2 on;” lines, then add exactly one.
+sudo sed -i -E '
+  s/^( *listen[[:space:]]+443[[:space:]]+ssl)[[:space:]]+http2;/\1;/;
+  /http2 on;/d
+' /etc/nginx/conf.d/lifeline.conf
+sudo sed -i -E '/^ *listen[[:space:]]+443[[:space:]]+ssl;$/a\    http2 on;' \
+    /etc/nginx/conf.d/lifeline.conf
+
+# 3) Abort the deploy if the bad pattern is still present
+if grep -qE '\$HOSTNAME|listen[[:space:]]+443[[:space:]]+ssl[[:space:]]+http2;' \
+           /etc/nginx/conf.d/lifeline.conf; then
+  echo "ERROR: placeholder or deprecated listen http2 syntax still present"; exit 1
+fi
+
+# 4) Reload Nginx with the cleaned config
+sudo nginx -t && sudo systemctl reload nginx
