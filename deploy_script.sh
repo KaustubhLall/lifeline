@@ -155,6 +155,11 @@ echo "--- Verifying SSL certificate permissions ---"
 sudo ls -la /etc/letsencrypt/live/$HOSTNAME/
 sudo ls -la /etc/letsencrypt/archive/$HOSTNAME/
 
+# Ensure nginx has access to certificates
+echo "--- Ensuring Nginx has access to certificates ---"
+sudo chmod -R 755 /etc/letsencrypt/archive
+sudo chmod -R 755 /etc/letsencrypt/live
+
 # Add SSL parameters if missing
 if [ ! -f "/etc/letsencrypt/options-ssl-nginx.conf" ]; then
     echo "--- Creating SSL options file ---"
@@ -173,6 +178,67 @@ if [ ! -f "/etc/letsencrypt/ssl-dhparams.pem" ]; then
     echo "--- Creating DH params ---"
     sudo openssl dhparam -out /etc/letsencrypt/ssl-dhparams.pem 2048
 fi
+
+# Create a clean, updated Nginx configuration (fixes the http2 directive warning and ensures proper SSL setup)
+echo "--- Creating final Nginx configuration ---"
+sudo tee /etc/nginx/conf.d/lifeline.conf > /dev/null <<EOT
+# HTTP server - redirect to HTTPS
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $HOSTNAME;
+
+    # Redirect all HTTP requests to HTTPS
+    location / {
+        return 301 https://\$host\$request_uri;
+    }
+}
+
+# HTTPS server
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;  # Proper way to enable HTTP/2
+
+    server_name $HOSTNAME;
+
+    # SSL certificates
+    ssl_certificate /etc/letsencrypt/live/$HOSTNAME/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$HOSTNAME/privkey.pem;
+
+    # Include SSL options
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_ciphers "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384";
+
+    # OCSP Stapling
+    ssl_stapling on;
+    ssl_stapling_verify on;
+    resolver 8.8.8.8 8.8.4.4 valid=300s;
+    resolver_timeout 5s;
+
+    # Root for React frontend
+    root /home/ec2-user/lifeline/frontend;
+    index index.html;
+
+    # Handle React routing
+    location / {
+        try_files \$uri /index.html;
+    }
+
+    # Proxy API requests to Django backend
+    location /api {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Ssl on;
+    }
+}
+EOT
 
 # Test Nginx configuration
 echo "--- Testing Nginx configuration ---"
@@ -201,6 +267,8 @@ echo "--- Testing SSL Connection ---"
 echo | openssl s_client -connect localhost:443 -servername $HOSTNAME 2>/dev/null | grep "Verify return code"
 echo "--- SSL Certificate Info ---"
 echo | openssl s_client -connect localhost:443 -servername $HOSTNAME 2>/dev/null | openssl x509 -noout -dates
+echo "--- Full SSL Certificate Check ---"
+echo | openssl s_client -connect localhost:443 -servername $HOSTNAME -showcerts
 echo "--- Last 30 lines of Nginx Error Log ---"
 sudo tail -n 30 /var/log/nginx/error.log || echo "No Nginx error log found."
 echo "--- Last 30 lines of Backend Log ---"
