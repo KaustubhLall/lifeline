@@ -31,15 +31,17 @@ pip install gunicorn
 # --- 4. Setup Django ---
 echo "--- Setting up Django database ---"
 cd /home/ec2-user/lifeline/backend/LifeLine
+
+# Read secrets from temporary files and export them for manage.py
+export DJANGO_SECRET_KEY=$(cat /tmp/django_secret_key)
+export OPENAI_API_KEY=$(cat /tmp/openai_api_key)
+
 python manage.py migrate
 python manage.py collectstatic --noinput
 
 # --- 5. Create systemd environment file ---
 echo "--- Creating systemd environment file ---"
-# Read secrets from temporary files to avoid shell interpretation issues
-DJANGO_SECRET_KEY=$(cat /tmp/django_secret_key)
-OPENAI_API_KEY=$(cat /tmp/openai_api_key)
-
+# Use the same secrets that were just exported
 echo "DJANGO_SECRET_KEY=$DJANGO_SECRET_KEY" | sudo tee /etc/lifeline.env
 echo "OPENAI_API_KEY=$OPENAI_API_KEY" | sudo tee -a /etc/lifeline.env
 sudo chmod 644 /etc/lifeline.env

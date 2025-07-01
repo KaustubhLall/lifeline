@@ -52,9 +52,9 @@ jobs:
         # Step 3: Execute the deployment script on EC2
         echo "--- Executing deployment script on EC2 ---"
         ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${SSH_TARGET} "\
+          echo '${{ secrets.DJANGO_SECRET_KEY }}' > /tmp/django_secret_key && \
+          echo '${{ secrets.OPENAI_API_KEY }}' > /tmp/openai_api_key && \
           chmod +x /home/ec2-user/deploy_script.sh && \
-          export DJANGO_SECRET_KEY='${{ secrets.DJANGO_SECRET_KEY }}' && \
-          export OPENAI_API_KEY='${{ secrets.OPENAI_API_KEY }}' && \
           export HOSTNAME='${HOSTNAME}' && \
           /home/ec2-user/deploy_script.sh
         "
