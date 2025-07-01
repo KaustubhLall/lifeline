@@ -30,7 +30,7 @@ sudo systemctl stop nginx           || true
 
 # ─┐ 2. OS packages
 # ─┴───────────────────────────────────────────────────────────
-sudo yum install -y python3-pip certbot-nginx bind-utils rsync curl openssl
+sudo yum install -y python3-pip certbot-nginx bind-utils rsync
 
 # ─┐ 3. Sync application files
 # ─┴───────────────────────────────────────────────────────────
