@@ -129,7 +129,8 @@ server {
 }
 
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    http2 on;
     server_name \$HOSTNAME;
 
     # SSL configuration from Certbot
