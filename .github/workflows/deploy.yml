@@ -43,146 +43,18 @@ jobs:
         fi
         echo "Connecting to ${HOSTNAME} (${SSH_TARGET})"
 
-        # Step 2: Create a local deployment script
-        cat <<'EOF' > deploy_script.sh
-          #!/bin/bash
-          set -e
-
-          # Stop services and clean up previous deployment
-          echo "--- Stopping services and cleaning up ---"
-          sudo systemctl stop lifeline-backend || true
-          sudo systemctl stop nginx || true
-          sudo rm -rf /home/ec2-user/lifeline
-          mkdir -p /home/ec2-user/lifeline/backend
-          mkdir -p /home/ec2-user/lifeline/frontend
-
-          # Move new files into place
-          echo "--- Moving new application files ---"
-          sudo mv /tmp/backend/* /home/ec2-user/lifeline/backend/
-          sudo mv /tmp/frontend_build/* /home/ec2-user/lifeline/frontend/
-          sudo chmod 755 /home/ec2-user /home/ec2-user/lifeline
-          sudo chmod -R 755 /home/ec2-user/lifeline/frontend
-
-          # Install Python dependencies
-          echo "--- Installing Python dependencies ---"
-          cd /home/ec2-user/lifeline
-          python3 -m venv venv
-          source venv/bin/activate
-          pip install -r backend/requirements.txt
-          pip install gunicorn
-
-          # Setup Django
-          echo "--- Setting up Django database ---"
-          cd /home/ec2-user/lifeline/backend/LifeLine
-          export DJANGO_SECRET_KEY='${{ secrets.DJANGO_SECRET_KEY }}'
-          export OPENAI_API_KEY='${{ secrets.OPENAI_API_KEY }}'
-          python manage.py migrate
-          python manage.py collectstatic --noinput
-
-          # Create systemd environment file
-          echo "--- Creating systemd environment file ---"
-          echo "DJANGO_SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}" | sudo tee /etc/lifeline.env
-          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" | sudo tee -a /etc/lifeline.env
-          sudo chmod 644 /etc/lifeline.env
-
-          # Create systemd service file
-          echo "--- Creating systemd service file ---"
-          sudo tee /etc/systemd/system/lifeline-backend.service > /dev/null <<EOT
-[Unit]
-Description=LifeLine Django Backend
-After=network.target
-
-[Service]
-Type=simple
-User=ec2-user
-WorkingDirectory=/home/ec2-user/lifeline/backend/LifeLine
-EnvironmentFile=/etc/lifeline.env
-ExecStart=/home/ec2-user/lifeline/venv/bin/gunicorn LifeLine.wsgi:application --bind 0.0.0.0:8000
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-EOT
-
-          # Configure SSL and Nginx
-          echo "--- Configuring Nginx and SSL ---"
-          sudo yum install -y python3-pip certbot-nginx
-          
-          # Create Nginx config for Certbot
-          sudo tee /etc/nginx/conf.d/lifeline.conf > /dev/null <<EOT
-server {
-    listen 80;
-    server_name ${HOSTNAME};
-
-    location /.well-known/acme-challenge/ {
-        root /var/www/html;
-    }
-
-    location / {
-        return 404; # Or redirect to a temporary page
-    }
-}
-EOT
-
-          sudo mkdir -p /var/www/html
-          sudo systemctl restart nginx || sudo systemctl start nginx
-          sleep 5 # Give Nginx a moment to start
-
-          # Obtain SSL certificate
-          echo "--- Obtaining SSL certificate from Let's Encrypt ---"
-          sudo certbot --nginx -d ${HOSTNAME} --non-interactive --agree-tos --email admin@lifeline.com --redirect
-
-          # Create final Nginx config
-          echo "--- Creating final Nginx configuration ---"
-          sudo tee /etc/nginx/conf.d/lifeline.conf > /dev/null <<EOT
-server {
-    listen 80;
-    server_name ${HOSTNAME};
-    return 301 https://\$host\$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name ${HOSTNAME};
-
-    ssl_certificate /etc/letsencrypt/live/${HOSTNAME}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${HOSTNAME}/privkey.pem;
-    include /etc/letsencrypt/options-ssl-nginx.conf;
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
-
-    root /home/ec2-user/lifeline/frontend;
-    index index.html;
-
-    location / {
-        try_files \$uri /index.html;
-    }
-
-    location /api {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-}
-EOT
-
-          # Start all services
-          echo "--- Starting all services ---"
-          sudo systemctl daemon-reload
-          sudo systemctl restart nginx
-          sudo systemctl enable lifeline-backend
-          sudo systemctl start lifeline-backend
-
-          echo "--- Deployment successful! ---"
-EOF
-
-        # Step 3: Copy files and script to EC2
+        # Step 2: Copy files and deployment script to EC2
         echo "--- Copying files to EC2 ---"
         scp -o StrictHostKeyChecking=no -i private_key -r frontend/build/* ${USER_NAME}@${SSH_TARGET}:/tmp/frontend_build/
         scp -o StrictHostKeyChecking=no -i private_key -r backend/* ${USER_NAME}@${SSH_TARGET}:/tmp/backend/
         scp -o StrictHostKeyChecking=no -i private_key deploy_script.sh ${USER_NAME}@${SSH_TARGET}:/home/ec2-user/
 
-        # Step 4: Execute the deployment script on EC2
+        # Step 3: Execute the deployment script on EC2
         echo "--- Executing deployment script on EC2 ---"
-        ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${SSH_TARGET} "chmod +x /home/ec2-user/deploy_script.sh && /home/ec2-user/deploy_script.sh"
+        ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${SSH_TARGET} "\
+          chmod +x /home/ec2-user/deploy_script.sh && \
+          export DJANGO_SECRET_KEY='${{ secrets.DJANGO_SECRET_KEY }}' && \
+          export OPENAI_API_KEY='${{ secrets.OPENAI_API_KEY }}' && \
+          export HOSTNAME='${HOSTNAME}' && \
+          /home/ec2-user/deploy_script.sh
+        "
