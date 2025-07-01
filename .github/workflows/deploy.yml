@@ -18,6 +18,9 @@ jobs:
       LETSENCRYPT_EMAIL:   ${{ secrets.LETSENCRYPT_EMAIL }}    # optional
 
     steps:
+    # ─────────────────────────────────────────────────────────────
+    # 1.  Checkout & build frontend
+    # ─────────────────────────────────────────────────────────────
     - uses: actions/checkout@v4
 
     - name: Build frontend
@@ -26,6 +29,9 @@ jobs:
         npm ci
         npm run build
 
+    # ─────────────────────────────────────────────────────────────
+    # 2.  Write SSH key and resolve EC2 IP
+    # ─────────────────────────────────────────────────────────────
     - name: Write SSH key
       run: |
         echo "$PRIVATE_KEY" > private_key
@@ -37,7 +43,10 @@ jobs:
         IP=$(dig +short "$HOSTNAME" @1.1.1.1 | head -n1)
         echo "ip=$IP" >> "$GITHUB_OUTPUT"
 
-    - name: Copy artefacts & script to EC2
+    # ─────────────────────────────────────────────────────────────
+    # 3.  Copy artefacts & script to EC2
+    # ─────────────────────────────────────────────────────────────
+    - name: Copy artefacts and deploy script
       run: |
         SSH_TARGET=${{ steps.resolve.outputs.ip }}
         scp -o StrictHostKeyChecking=no -i private_key -r \
@@ -48,7 +57,7 @@ jobs:
             deploy_script.sh               "$USER_NAME@$SSH_TARGET:/home/ec2-user/"
 
     # ─────────────────────────────────────────────────────────────
-    # 6.  Run deployment script on EC2
+    # 4.  Run deployment script on EC2
     # ─────────────────────────────────────────────────────────────
     - name: Run deployment script on EC2
       run: |
@@ -63,38 +72,38 @@ jobs:
         "
 
     # ─────────────────────────────────────────────────────────────
-    # 7.  **Hard-patch Nginx file exactly the way you do it by hand**
+    # 5.  Post-deploy hard patch (forces correct vhost every run)
     # ─────────────────────────────────────────────────────────────
     - name: Hard-patch lifeline.conf and reload Nginx
       run: |
         SSH_TARGET=${{ steps.resolve.outputs.ip }}
         ssh -o StrictHostKeyChecking=no -i private_key "$USER_NAME@$SSH_TARGET" '
-          # replace any literal $HOSTNAME with the real one
-          sudo sed -i -E "s/\\\$?HOSTNAME/lifeline-kaus.duckdns.org/g" \
-              /etc/nginx/conf.d/lifeline.conf
+          REAL=lifeline-kaus.duckdns.org
 
-          # collapse “listen 443 ssl http2;” → “listen 443 ssl;”
-          # then ensure ONE “http2 on;” right after
+          # Replace any literal $HOSTNAME placeholders
+          sudo sed -i -E "s#/etc/letsencrypt/live/\\\$?HOSTNAME#/etc/letsencrypt/live/${REAL}#g" \
+                /etc/nginx/conf.d/lifeline.conf
+          sudo sed -i -E "s/\\\$?HOSTNAME/${REAL}/g" \
+                /etc/nginx/conf.d/lifeline.conf
+
+          # Fix deprecated listen syntax and ensure default_server + http2
           sudo sed -i -E "
-            s/^( *listen[[:space:]]+443[[:space:]]+ssl)[[:space:]]+http2;/\1;/;
+            s/^( *listen[[:space:]]+80)(.*);/\\1 default_server;/;
+            s/^( *listen[[:space:]]+\\[::\\]:80)(.*);/\\1 default_server;/;
+            s/^( *listen[[:space:]]+443[[:space:]]+ssl)(.*);/\\1 default_server;/;
+            s/^( *listen[[:space:]]+\\[::\\]:443[[:space:]]+ssl)(.*);/\\1 default_server;/;
+            s/^( *listen[[:space:]]+443[[:space:]]+ssl)[[:space:]]+http2;/\\1 default_server;/;
             /http2 on;/d
           " /etc/nginx/conf.d/lifeline.conf
-          sudo sed -i -E "/listen[[:space:]]+443[[:space:]]+ssl;/a\    http2 on;" \
-              /etc/nginx/conf.d/lifeline.conf
+          sudo sed -i -E "/listen[[:space:]]+443[[:space:]]+ssl.*;/a\\    http2 on;" \
+                /etc/nginx/conf.d/lifeline.conf
+
+          # Ensure cert exists (issue if missing)
+          if [ ! -d \"/etc/letsencrypt/live/${REAL}\" ]; then
+            sudo mkdir -p /var/www/html
+            sudo certbot certonly -n --agree-tos -m admin@${REAL} \
+                 --webroot -w /var/www/html -d ${REAL} -d www.${REAL}
+          fi
 
           sudo nginx -t && sudo systemctl reload nginx
         '
-        - name: Hard-fix vhost & reload
-  run: |
-    ssh -o StrictHostKeyChecking=no -i private_key $USER_NAME@${{ steps.resolve.outputs.ip }} '
-      sudo sed -i -E "
-        s/^( *listen[[:space:]]+80)/\1 default_server/;
-        s/^( *listen[[:space:]]+\[::\]:80)/\1 default_server/;
-        s/^( *listen[[:space:]]+443 ssl)/\1 default_server/;
-        s/^( *listen[[:space:]]+\[::\]:443 ssl)/\1 default_server/;
-        s/http2;$/;/;                             # drop old flag
-      " /etc/nginx/conf.d/lifeline.conf
-      sudo sed -i -E "/listen[[:space:]]+443 ssl;/a\\    http2 on;" \
-                   /etc/nginx/conf.d/lifeline.conf
-      sudo nginx -t && sudo systemctl reload nginx
-    '
