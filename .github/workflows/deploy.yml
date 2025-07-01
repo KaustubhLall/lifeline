@@ -54,11 +54,14 @@ jobs:
         
         # Move files to proper locations and fix permissions
         ssh -i private_key ${USER_NAME}@${SSH_TARGET} '
+          # Create directory structure first
+          mkdir -p /home/ec2-user/lifeline/backend
+          mkdir -p /home/ec2-user/lifeline/frontend
+          
           # Move backend files
           cp -r /tmp/backend/* /home/ec2-user/lifeline/backend/
           
           # Move frontend files
-          mkdir -p /home/ec2-user/lifeline/frontend
           cp -r /tmp/frontend_build/* /home/ec2-user/lifeline/frontend/
           
           # Fix critical permission issues that cause 500 errors
