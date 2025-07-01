@@ -37,11 +37,29 @@ jobs:
         # Stop services and clean up
         ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${HOSTNAME} 'sudo systemctl stop lifeline-backend || true; sudo systemctl stop nginx || true; sudo rm -rf /home/ec2-user/lifeline; mkdir -p /home/ec2-user/lifeline'
         
-        # Copy files
-        scp -i private_key -r frontend/build ${USER_NAME}@${HOSTNAME}:/home/ec2-user/lifeline/frontend
-        scp -i private_key -r backend ${USER_NAME}@${HOSTNAME}:/home/ec2-user/lifeline/backend
+        # Copy files to temporary locations
+        scp -i private_key -r frontend/build/* ${USER_NAME}@${HOSTNAME}:/tmp/frontend_build/
+        scp -i private_key -r backend/* ${USER_NAME}@${HOSTNAME}:/tmp/backend/
         
-        # Install and configure
+        # Move files to proper locations and fix permissions
+        ssh -i private_key ${USER_NAME}@${HOSTNAME} '
+          # Move backend files
+          cp -r /tmp/backend/* /home/ec2-user/lifeline/backend/
+          
+          # Move frontend files
+          mkdir -p /home/ec2-user/lifeline/frontend
+          cp -r /tmp/frontend_build/* /home/ec2-user/lifeline/frontend/
+          
+          # Fix critical permission issues that cause 500 errors
+          chmod 755 /home/ec2-user
+          chmod 755 /home/ec2-user/lifeline
+          chmod -R 755 /home/ec2-user/lifeline/frontend
+          
+          # Clean up temp files
+          rm -rf /tmp/frontend_build /tmp/backend
+        '
+        
+        # Install and configure Python dependencies
         ssh -i private_key ${USER_NAME}@${HOSTNAME} 'cd /home/ec2-user/lifeline && python3 -m venv venv && source venv/bin/activate && pip install -r backend/requirements.txt && pip install gunicorn'
         
         # Django setup
@@ -106,4 +124,4 @@ jobs:
         ssh -i private_key ${USER_NAME}@${HOSTNAME} 'sudo chown -R nginx:nginx /home/ec2-user/lifeline/frontend && sudo chmod -R 755 /home/ec2-user/lifeline/frontend'
         
         # Check if services are running and debug issues
-        ssh -i private_key ${USER_NAME}@${HOSTNAME} 'echo "=== Service Status ===" && sudo systemctl is-active lifeline-backend && sudo systemctl is-active nginx && echo "=== Port Check ===" && sudo netstat -tulpn | grep -E ":(80|8000)" && echo "=== Test Django directly ===" && curl -I http://localhost:8000/api/health/ && echo "=== Test nginx ===" && curl -I http://localhost:80 && echo "=== Frontend files check ===" && ls -la /home/ec2-user/lifeline/frontend/ && echo "=== Nginx error log ===" && sudo tail -n 10 /var/log/nginx/error.log'
+        ssh -i private_key ${USER_NAME}@${HOSTNAME} 'echo "=== Service Status ===" && sudo systemctl is-active lifeline-backend && sudo systemctl is-active nginx && echo "=== Port Check ===" && sudo netstat -tulpn | grep -E ":(80|8000)" && echo "=== Test Django API health ===" && curl -s http://localhost:8000/api/health/ && echo "=== Test nginx ===" && curl -I http://localhost:80 && echo "=== Frontend files check ===" && ls -la /home/ec2-user/lifeline/frontend/ && echo "=== Nginx error log ===" && sudo tail -n 10 /var/log/nginx/error.log'
