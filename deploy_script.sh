@@ -9,18 +9,24 @@ set -e
 echo "--- Stopping services and cleaning up ---"
 sudo systemctl stop lifeline-backend || true
 sudo systemctl stop nginx || true
-sudo rm -rf /home/ec2-user/lifeline
+
+# --- 2. Install required dependencies ---
+echo "--- Installing required dependencies ---"
+sudo yum install -y python3-pip certbot-nginx bind-utils
+
+# --- 3. Setup application directories ---
+echo "--- Setting up application directories ---"
 mkdir -p /home/ec2-user/lifeline/backend
 mkdir -p /home/ec2-user/lifeline/frontend
 
-# --- 2. Move new application files into place ---
+# Use rsync instead of mv for better reliability
 echo "--- Moving new application files ---"
-sudo mv /tmp/backend/* /home/ec2-user/lifeline/backend/
-sudo mv /tmp/frontend_build/* /home/ec2-user/lifeline/frontend/
+sudo rsync -a --delete /tmp/backend/ /home/ec2-user/lifeline/backend/
+sudo rsync -a --delete /tmp/frontend_build/ /home/ec2-user/lifeline/frontend/
 sudo chmod 755 /home/ec2-user /home/ec2-user/lifeline
 sudo chmod -R 755 /home/ec2-user/lifeline/frontend
 
-# --- 3. Install Python dependencies ---
+# --- 4. Install Python dependencies ---
 echo "--- Installing Python dependencies ---"
 cd /home/ec2-user/lifeline
 python3 -m venv venv
@@ -28,7 +34,7 @@ source venv/bin/activate
 pip install -r backend/requirements.txt
 pip install gunicorn
 
-# --- 4. Setup Django ---
+# --- 5. Setup Django ---
 echo "--- Setting up Django database ---"
 cd /home/ec2-user/lifeline/backend/LifeLine
 
@@ -39,7 +45,7 @@ export OPENAI_API_KEY=$(cat /tmp/openai_api_key)
 python manage.py migrate
 python manage.py collectstatic --noinput
 
-# --- 5. Create systemd environment file ---
+# --- 6. Create systemd environment file ---
 echo "--- Creating systemd environment file ---"
 # Use the same secrets that were just exported
 echo "DJANGO_SECRET_KEY=$DJANGO_SECRET_KEY" | sudo tee /etc/lifeline.env
@@ -49,7 +55,7 @@ sudo chmod 644 /etc/lifeline.env
 # Clean up temporary secret files
 sudo rm /tmp/django_secret_key /tmp/openai_api_key
 
-# --- 6. Create systemd service file ---
+# --- 7. Create systemd service file with improved logging configuration ---
 echo "--- Creating systemd service file ---"
 sudo tee /etc/systemd/system/lifeline-backend.service > /dev/null <<EOT
 [Unit]
@@ -61,16 +67,15 @@ Type=simple
 User=ec2-user
 WorkingDirectory=/home/ec2-user/lifeline/backend/LifeLine
 EnvironmentFile=/etc/lifeline.env
-ExecStart=/home/ec2-user/lifeline/venv/bin/gunicorn LifeLine.wsgi:application --bind 0.0.0.0:8000
+ExecStart=/home/ec2-user/lifeline/venv/bin/gunicorn LifeLine.wsgi:application --bind 0.0.0.0:8000 --log-level warning
 Restart=always
 
 [Install]
 WantedBy=multi-user.target
 EOT
 
-# --- 7. Configure Nginx and SSL with Certbot ---
+# --- 8. Configure Nginx and SSL with Certbot ---
 echo "--- Configuring Nginx and SSL ---"
-sudo yum install -y python3-pip certbot-nginx
 
 # Create initial HTTP-only Nginx configuration
 echo "--- Creating initial HTTP Nginx configuration ---"
@@ -138,8 +143,19 @@ if ! sudo systemctl is-active --quiet nginx; then
     exit 1
 fi
 
+# Create the deploy hook script to fix Certbot's Nginx config updates
+echo "--- Creating Certbot deploy hook ---"
+sudo tee /etc/letsencrypt/renewal-hooks/deploy/fix-nginx-config.sh > /dev/null <<EOT
+#!/bin/bash
+# This script fixes the Nginx config after certificate renewal
+sed -i 's/listen .* ssl http2;/listen 443 ssl;\n    http2 on;/g' /etc/nginx/conf.d/lifeline.conf
+systemctl reload nginx
+EOT
+sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/fix-nginx-config.sh
+
 # Obtain the SSL certificate from Let's Encrypt
 echo "--- Obtaining SSL certificate from Let's Encrypt ---"
+sudo mkdir -p /etc/letsencrypt/renewal-hooks/deploy
 sudo certbot --nginx -d $HOSTNAME --non-interactive --agree-tos --email admin@lifeline.com --redirect
 
 # Verify the certificate was obtained correctly
@@ -160,26 +176,11 @@ echo "--- Ensuring Nginx has access to certificates ---"
 sudo chmod -R 755 /etc/letsencrypt/archive
 sudo chmod -R 755 /etc/letsencrypt/live
 
-# Add SSL parameters if missing
-if [ ! -f "/etc/letsencrypt/options-ssl-nginx.conf" ]; then
-    echo "--- Creating SSL options file ---"
-    sudo mkdir -p /etc/letsencrypt
-    sudo tee /etc/letsencrypt/options-ssl-nginx.conf > /dev/null <<EOT
-ssl_session_cache shared:le_nginx_SSL:10m;
-ssl_session_timeout 1440m;
-ssl_session_tickets off;
-ssl_protocols TLSv1.2 TLSv1.3;
-ssl_prefer_server_ciphers off;
-ssl_ciphers "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384";
-EOT
-fi
+# Fix any HTTP/2 directive issues in the Nginx config
+echo "--- Fixing HTTP/2 directive in Nginx config ---"
+sudo sed -i 's/listen .* ssl http2;/listen 443 ssl;\n    http2 on;/g' /etc/nginx/conf.d/lifeline.conf
 
-if [ ! -f "/etc/letsencrypt/ssl-dhparams.pem" ]; then
-    echo "--- Creating DH params ---"
-    sudo openssl dhparam -out /etc/letsencrypt/ssl-dhparams.pem 2048
-fi
-
-# Create a clean, updated Nginx configuration (fixes the http2 directive warning and ensures proper SSL setup)
+# Create a clean, updated Nginx configuration
 echo "--- Creating final Nginx configuration ---"
 sudo tee /etc/nginx/conf.d/lifeline.conf > /dev/null <<EOT
 # HTTP server - redirect to HTTPS
@@ -244,7 +245,11 @@ EOT
 echo "--- Testing Nginx configuration ---"
 sudo nginx -t
 
-# --- 8. Start all services ---
+# Enable the Certbot renewal timer
+echo "--- Enabling Certbot renewal timer ---"
+sudo systemctl enable --now certbot-renew.timer
+
+# --- 9. Start all services ---
 echo "--- Starting all services ---"
 sudo systemctl daemon-reload
 sudo systemctl enable lifeline-backend
@@ -253,7 +258,7 @@ sudo systemctl restart nginx
 
 echo "--- Deployment successful! ---"
 
-# --- 9. Final Health Check ---
+# --- 10. Final Health Check ---
 echo "--- Performing Final Health Checks ---"
 echo "--- Nginx Status ---"
 sudo systemctl status nginx --no-pager || echo "Nginx failed to start"
@@ -267,9 +272,9 @@ echo "--- Testing SSL Connection ---"
 echo | openssl s_client -connect localhost:443 -servername $HOSTNAME 2>/dev/null | grep "Verify return code"
 echo "--- SSL Certificate Info ---"
 echo | openssl s_client -connect localhost:443 -servername $HOSTNAME 2>/dev/null | openssl x509 -noout -dates
-echo "--- Full SSL Certificate Check ---"
-echo | openssl s_client -connect localhost:443 -servername $HOSTNAME -showcerts
+echo "--- Certificate Validity Check ---"
+sudo certbot certificates --domain "$HOSTNAME" || echo "Could not check certificate validity"
 echo "--- Last 30 lines of Nginx Error Log ---"
-sudo tail -n 30 /var/log/nginx/error.log || echo "No Nginx error log found."
+sudo tail -n 30 /var/log/nginx/error.log | grep -v 'http2" directive is deprecated' || echo "No Nginx error log found or no errors."
 echo "--- Last 30 lines of Backend Log ---"
-sudo journalctl -u lifeline-backend -n 30 --no-pager || echo "No backend log found."
+sudo journalctl -u lifeline-backend -n 30 --no-pager | grep -v "Worker .* was sent SIGTERM" || echo "No backend log found or no errors."
