@@ -36,9 +36,16 @@ python manage.py collectstatic --noinput
 
 # --- 5. Create systemd environment file ---
 echo "--- Creating systemd environment file ---"
+# Read secrets from temporary files to avoid shell interpretation issues
+DJANGO_SECRET_KEY=$(cat /tmp/django_secret_key)
+OPENAI_API_KEY=$(cat /tmp/openai_api_key)
+
 echo "DJANGO_SECRET_KEY=$DJANGO_SECRET_KEY" | sudo tee /etc/lifeline.env
 echo "OPENAI_API_KEY=$OPENAI_API_KEY" | sudo tee -a /etc/lifeline.env
 sudo chmod 644 /etc/lifeline.env
+
+# Clean up temporary secret files
+sudo rm /tmp/django_secret_key /tmp/openai_api_key
 
 # --- 6. Create systemd service file ---
 echo "--- Creating systemd service file ---"
@@ -61,6 +68,8 @@ EOT
 
 # --- 7. Configure Nginx and SSL with Certbot ---
 echo "--- Configuring Nginx and SSL ---"
+
+
 sudo yum install -y python3-pip certbot-nginx
 
 # Add a DNS propagation check before running Certbot
@@ -118,3 +127,18 @@ sudo systemctl enable lifeline-backend
 sudo systemctl start lifeline-backend
 
 echo "--- Deployment successful! ---"
+
+# --- 9. Final Health Check ---
+echo "--- Performing Final Health Checks ---"
+echo "--- Nginx Status ---"
+sudo systemctl status nginx --no-pager || echo "Nginx failed to start"
+echo "--- Backend Status ---"
+sudo systemctl status lifeline-backend --no-pager || echo "Backend failed to start"
+echo "--- Listening Ports ---"
+sudo netstat -tulpn | grep LISTEN
+echo "--- Nginx Configuration Test ---"
+sudo nginx -t
+echo "--- Last 30 lines of Nginx Error Log ---"
+sudo tail -n 30 /var/log/nginx/error.log || echo "No Nginx error log found."
+echo "--- Last 30 lines of Backend Log ---"
+sudo journalctl -u lifeline-backend -n 30 --no-pager || echo "No backend log found."
