@@ -84,3 +84,17 @@ jobs:
 
           sudo nginx -t && sudo systemctl reload nginx
         '
+        - name: Hard-fix vhost & reload
+  run: |
+    ssh -o StrictHostKeyChecking=no -i private_key $USER_NAME@${{ steps.resolve.outputs.ip }} '
+      sudo sed -i -E "
+        s/^( *listen[[:space:]]+80)/\1 default_server/;
+        s/^( *listen[[:space:]]+\[::\]:80)/\1 default_server/;
+        s/^( *listen[[:space:]]+443 ssl)/\1 default_server/;
+        s/^( *listen[[:space:]]+\[::\]:443 ssl)/\1 default_server/;
+        s/http2;$/;/;                             # drop old flag
+      " /etc/nginx/conf.d/lifeline.conf
+      sudo sed -i -E "/listen[[:space:]]+443 ssl;/a\\    http2 on;" \
+                   /etc/nginx/conf.d/lifeline.conf
+      sudo nginx -t && sudo systemctl reload nginx
+    '
