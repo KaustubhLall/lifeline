@@ -184,12 +184,37 @@ jobs:
           
           # Try to obtain SSL certificate from Let'\''s Encrypt
           echo "Attempting to get SSL certificate for ${HOSTNAME}"
-          if sudo certbot --nginx -d ${HOSTNAME} --non-interactive --agree-tos --email admin@${HOSTNAME} --redirect; then
+          
+          # Ensure DuckDNS record is current before requesting certificate
+          echo "Verifying domain points to this server..."
+          CURRENT_IP=$(curl -s http://checkip.amazonaws.com/)
+          DOMAIN_IP=$(dig +short ${HOSTNAME} @1.1.1.1 | head -n1)
+          
+          if [[ "$CURRENT_IP" != "$DOMAIN_IP" ]]; then
+            echo "WARNING: Domain ${HOSTNAME} points to ${DOMAIN_IP} but this server is ${CURRENT_IP}"
+            echo "SSL certificate request may fail due to domain mismatch"
+          else
+            echo "Domain verification passed: ${HOSTNAME} -> ${CURRENT_IP}"
+          fi
+          
+          # Try Let's Encrypt certificate
+          if sudo certbot --nginx -d ${HOSTNAME} --non-interactive --agree-tos --email admin@${HOSTNAME} --redirect --verbose; then
             echo "SSL certificate obtained successfully"
             # Setup automatic certificate renewal
             echo "0 12 * * * /usr/local/bin/certbot renew --quiet" | sudo crontab -
           else
+            echo "Let's Encrypt failed. Checking common issues..."
+            
+            # Check if port 80 is accessible
+            echo "Testing port 80 accessibility..."
+            if curl -I -m 10 http://${HOSTNAME}/.well-known/acme-challenge/test 2>/dev/null; then
+              echo "Port 80 is accessible"
+            else
+              echo "Port 80 may be blocked - this prevents Let's Encrypt validation"
+            fi
+            
             echo "SSL certificate failed, falling back to self-signed certificate"
+            echo "Note: This will show browser warnings but HTTPS will still work"
             # Create self-signed certificate as fallback
             sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
               -keyout /etc/ssl/private/lifeline.key \
