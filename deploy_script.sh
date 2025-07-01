@@ -72,32 +72,16 @@ EOT
 echo "--- Configuring Nginx and SSL ---"
 sudo yum install -y python3-pip certbot-nginx
 
-# --- 8. Create Final Nginx Configuration ---
-echo "--- Creating final Nginx configuration ---"
+# Create initial HTTP-only Nginx configuration
+echo "--- Creating initial HTTP Nginx configuration ---"
 sudo tee /etc/nginx/conf.d/lifeline.conf > /dev/null <<EOT
 server {
     listen 80;
-    server_name \$HOSTNAME;
+    server_name $HOSTNAME;
 
-    # Redirect all HTTP requests to HTTPS
     location /.well-known/acme-challenge/ {
         root /var/www/html;
     }
-
-    location / {
-        return 301 https://\$host\$request_uri;
-    }
-}
-
-server {
-    listen 443 ssl http2;
-    server_name \$HOSTNAME;
-
-    # SSL configuration from Certbot will be placed here
-    ssl_certificate /etc/letsencrypt/live/\$HOSTNAME/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/\$HOSTNAME/privkey.pem;
-    include /etc/letsencrypt/options-ssl-nginx.conf;
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
     # Root for React frontend
     root /home/ec2-user/lifeline/frontend;
@@ -139,32 +123,84 @@ fi
 
 echo "--- DNS Propagation Verified ---"
 sudo mkdir -p /var/www/html
+sudo chmod -R 755 /var/www/html
+
+# Start Nginx to handle HTTP requests first
+echo "--- Starting Nginx with HTTP configuration ---"
 sudo systemctl restart nginx || sudo systemctl start nginx
 sleep 5 # Give Nginx a moment to start
+
+# Verify Nginx is running before continuing
+if ! sudo systemctl is-active --quiet nginx; then
+    echo "!!! Nginx failed to start with the HTTP configuration"
+    sudo systemctl status nginx --no-pager
+    sudo nginx -t
+    exit 1
+fi
 
 # Obtain the SSL certificate from Let's Encrypt
 echo "--- Obtaining SSL certificate from Let's Encrypt ---"
 sudo certbot --nginx -d $HOSTNAME --non-interactive --agree-tos --email admin@lifeline.com --redirect
 
-# --- 9. Start all services ---
+# Verify the certificate was obtained correctly
+if [ ! -f "/etc/letsencrypt/live/$HOSTNAME/fullchain.pem" ] || [ ! -f "/etc/letsencrypt/live/$HOSTNAME/privkey.pem" ]; then
+    echo "!!! SSL Certificate files were not created properly"
+    ls -la /etc/letsencrypt/live/$HOSTNAME/ || echo "Directory not found"
+    sudo cat /var/log/letsencrypt/letsencrypt.log | tail -n 50
+    exit 1
+fi
+
+# Verify permissions on certificate files
+echo "--- Verifying SSL certificate permissions ---"
+sudo ls -la /etc/letsencrypt/live/$HOSTNAME/
+sudo ls -la /etc/letsencrypt/archive/$HOSTNAME/
+
+# Add SSL parameters if missing
+if [ ! -f "/etc/letsencrypt/options-ssl-nginx.conf" ]; then
+    echo "--- Creating SSL options file ---"
+    sudo mkdir -p /etc/letsencrypt
+    sudo tee /etc/letsencrypt/options-ssl-nginx.conf > /dev/null <<EOT
+ssl_session_cache shared:le_nginx_SSL:10m;
+ssl_session_timeout 1440m;
+ssl_session_tickets off;
+ssl_protocols TLSv1.2 TLSv1.3;
+ssl_prefer_server_ciphers off;
+ssl_ciphers "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384";
+EOT
+fi
+
+if [ ! -f "/etc/letsencrypt/ssl-dhparams.pem" ]; then
+    echo "--- Creating DH params ---"
+    sudo openssl dhparam -out /etc/letsencrypt/ssl-dhparams.pem 2048
+fi
+
+# Test Nginx configuration
+echo "--- Testing Nginx configuration ---"
+sudo nginx -t
+
+# --- 8. Start all services ---
 echo "--- Starting all services ---"
 sudo systemctl daemon-reload
-sudo systemctl restart nginx
 sudo systemctl enable lifeline-backend
 sudo systemctl start lifeline-backend
+sudo systemctl restart nginx
 
 echo "--- Deployment successful! ---"
 
-# --- 10. Final Health Check ---
+# --- 9. Final Health Check ---
 echo "--- Performing Final Health Checks ---"
 echo "--- Nginx Status ---"
 sudo systemctl status nginx --no-pager || echo "Nginx failed to start"
 echo "--- Backend Status ---"
 sudo systemctl status lifeline-backend --no-pager || echo "Backend failed to start"
 echo "--- Listening Ports ---"
-sudo netstat -tulpn | grep LISTEN
+sudo ss -tulpn | grep -E ':80|:443|:8000' || echo "No expected ports found"
 echo "--- Nginx Configuration Test ---"
 sudo nginx -t
+echo "--- Testing SSL Connection ---"
+echo | openssl s_client -connect localhost:443 -servername $HOSTNAME 2>/dev/null | grep "Verify return code"
+echo "--- SSL Certificate Info ---"
+echo | openssl s_client -connect localhost:443 -servername $HOSTNAME 2>/dev/null | openssl x509 -noout -dates
 echo "--- Last 30 lines of Nginx Error Log ---"
 sudo tail -n 30 /var/log/nginx/error.log || echo "No Nginx error log found."
 echo "--- Last 30 lines of Backend Log ---"
