@@ -9,52 +9,70 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    env:
+      HOSTNAME: ${{ secrets.EC2_HOSTNAME }}        # lifeline-kaus.duckdns.org
+      USER_NAME: ${{ secrets.EC2_USER_NAME }}      # usually ec2-user
+      PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+      DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+      OPENAI_API_KEY:  ${{ secrets.OPENAI_API_KEY }}
+      LETSENCRYPT_EMAIL: ${{ secrets.LETSENCRYPT_EMAIL }}
+
     steps:
+    # ─────────────────────────────────────────────────────────────
+    # 1.  Check out repo
+    # ─────────────────────────────────────────────────────────────
     - uses: actions/checkout@v4
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-
+    # ─────────────────────────────────────────────────────────────
+    # 2.  Build frontend (React) once, locally
+    # ─────────────────────────────────────────────────────────────
     - name: Build frontend
       working-directory: ./frontend
       run: |
         npm ci
-        npm run build
+        npm run build        # outputs to frontend/build
 
-    - name: Deploy to EC2
-      env:
-        PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-        HOSTNAME: ${{ secrets.EC2_HOSTNAME }}
-        USER_NAME: ${{ secrets.EC2_USER_NAME }}
-        DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
-        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    # ─────────────────────────────────────────────────────────────
+    # 3.  Prepare SSH key
+    # ─────────────────────────────────────────────────────────────
+    - name: Write SSH key
       run: |
         echo "$PRIVATE_KEY" > private_key
         chmod 600 private_key
 
-        # Step 1: Resolve Hostname to IP
-        echo "Resolving ${HOSTNAME}..."
-        SSH_TARGET=$(dig @1.1.1.1 +short ${HOSTNAME} | head -n1)
-        if [[ -z "$SSH_TARGET" ]]; then
-          echo "DNS resolution failed. Please check that ${HOSTNAME} points to your EC2 IP and try again in 5 minutes."
-          exit 1
-        fi
-        echo "Connecting to ${HOSTNAME} (${SSH_TARGET})"
+    # ─────────────────────────────────────────────────────────────
+    # 4.  Resolve EC2 IP from hostname (Route 53 / DuckDNS etc.)
+    # ─────────────────────────────────────────────────────────────
+    - name: Resolve EC2 IP
+      id: resolve
+      run: |
+        IP=$(dig +short "$HOSTNAME" @1.1.1.1 | head -n1)
+        echo "ip=$IP" >> "$GITHUB_OUTPUT"
 
-        # Step 2: Copy files and deployment script to EC2
-        echo "--- Copying files to EC2 ---"
-        scp -o StrictHostKeyChecking=no -i private_key -r frontend/build/* ${USER_NAME}@${SSH_TARGET}:/tmp/frontend_build/
-        scp -o StrictHostKeyChecking=no -i private_key -r backend/* ${USER_NAME}@${SSH_TARGET}:/tmp/backend/
-        scp -o StrictHostKeyChecking=no -i private_key deploy_script.sh ${USER_NAME}@${SSH_TARGET}:/home/ec2-user/
+    # ─────────────────────────────────────────────────────────────
+    # 5.  Copy artefacts & script to EC2
+    # ─────────────────────────────────────────────────────────────
+    - name: Copy files to EC2
+      run: |
+        SSH_TARGET=${{ steps.resolve.outputs.ip }}
+        scp -o StrictHostKeyChecking=no -i private_key -r \
+            frontend/build/*               "$USER_NAME@$SSH_TARGET:/tmp/frontend_build/"
+        scp -o StrictHostKeyChecking=no -i private_key -r \
+            backend/*                      "$USER_NAME@$SSH_TARGET:/tmp/backend/"
+        scp -o StrictHostKeyChecking=no -i private_key \
+            deploy_script.sh               "$USER_NAME@$SSH_TARGET:/home/ec2-user/"
 
-        # Step 3: Execute the deployment script on EC2
-        echo "--- Executing deployment script on EC2 ---"
-        ssh -o StrictHostKeyChecking=no -i private_key ${USER_NAME}@${SSH_TARGET} "\
-          echo '${{ secrets.DJANGO_SECRET_KEY }}' > /tmp/django_secret_key && \
-          echo '${{ secrets.OPENAI_API_KEY }}' > /tmp/openai_api_key && \
-          chmod +x /home/ec2-user/deploy_script.sh && \
-          export HOSTNAME='${HOSTNAME}' && \
-          /home/ec2-user/deploy_script.sh
+    # ─────────────────────────────────────────────────────────────
+    # 6.  Execute deploy_script.sh on the instance
+    # ─────────────────────────────────────────────────────────────
+    - name: Run deployment script on EC2
+      run: |
+        SSH_TARGET=${{ steps.resolve.outputs.ip }}
+        ssh -o StrictHostKeyChecking=no -i private_key "$USER_NAME@$SSH_TARGET" "
+          export HOSTNAME='$HOSTNAME'
+          export DJANGO_SECRET_KEY='$DJANGO_SECRET_KEY'
+          export OPENAI_API_KEY='$OPENAI_API_KEY'
+          export LETSENCRYPT_EMAIL='${{ env.LETSENCRYPT_EMAIL }}'
+          chmod +x ~/deploy_script.sh
+          ~/deploy_script.sh
         "
