@@ -63,6 +63,26 @@ EOT
 echo "--- Configuring Nginx and SSL ---"
 sudo yum install -y python3-pip certbot-nginx
 
+# Add a DNS propagation check before running Certbot
+echo "--- Verifying DNS Propagation for Let's Encrypt ---"
+PUBLIC_IP=$(curl -s http://checkip.amazonaws.com/)
+RESOLVED_IP=$(dig +short $HOSTNAME @8.8.8.8)
+
+echo "This Server's Public IP: $PUBLIC_IP"
+echo "Domain ($HOSTNAME) resolves to (via Google DNS): $RESOLVED_IP"
+
+if [ "$PUBLIC_IP" != "$RESOLVED_IP" ]; then
+    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+    echo "!!! DNS VALIDATION FAILED"
+    echo "!!! Let's Encrypt will fail because your domain ($HOSTNAME) is not pointing to this server's IP ($PUBLIC_IP)."
+    echo "!!! DNS is currently pointing to: $RESOLVED_IP"
+    echo "!!! Please wait 10-15 more minutes for DNS to propagate and run the deployment again."
+    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+    exit 1
+fi
+
+echo "--- DNS Propagation Verified ---"
+
 # Create a temporary Nginx config for Certbot to perform validation
 sudo tee /etc/nginx/conf.d/lifeline.conf > /dev/null <<EOT
 server {
@@ -98,4 +118,3 @@ sudo systemctl enable lifeline-backend
 sudo systemctl start lifeline-backend
 
 echo "--- Deployment successful! ---"
-
