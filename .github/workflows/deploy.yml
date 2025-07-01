@@ -43,11 +43,14 @@ jobs:
         
         # Move files to proper locations and fix permissions
         ssh -i private_key ${USER_NAME}@${HOSTNAME} '
+          # Create directory structure first
+          mkdir -p /home/ec2-user/lifeline/backend
+          mkdir -p /home/ec2-user/lifeline/frontend
+          
           # Move backend files
           cp -r /tmp/backend/* /home/ec2-user/lifeline/backend/
           
-          # Move frontend files
-          mkdir -p /home/ec2-user/lifeline/frontend
+          # Move frontend files  
           cp -r /tmp/frontend_build/* /home/ec2-user/lifeline/frontend/
           
           # Fix critical permission issues that cause 500 errors
@@ -60,7 +63,7 @@ jobs:
         '
         
         # Install and configure Python dependencies
-        ssh -i private_key ${USER_NAME}@${HOSTNAME} 'cd /home/ec2-user/lifeline && python3 -m venv venv && source venv/bin/activate && pip install -r backend/requirements.txt && pip install gunicorn'
+        ssh -i private_key ${USER_NAME}@${HOSTNAME} 'cd /home/ec2-user/lifeline/backend && python3 -m venv ../venv && source ../venv/bin/activate && pip install -r requirements.txt && pip install gunicorn'
         
         # Django setup
         ssh -i private_key ${USER_NAME}@${HOSTNAME} 'cd /home/ec2-user/lifeline/backend/LifeLine && source /home/ec2-user/lifeline/venv/bin/activate && DJANGO_SECRET_KEY='"'"'${{ secrets.DJANGO_SECRET_KEY }}'"'"' OPENAI_API_KEY='"'"'${{ secrets.OPENAI_API_KEY }}'"'"' python manage.py migrate && DJANGO_SECRET_KEY='"'"'${{ secrets.DJANGO_SECRET_KEY }}'"'"' OPENAI_API_KEY='"'"'${{ secrets.OPENAI_API_KEY }}'"'"' python manage.py collectstatic --noinput'
