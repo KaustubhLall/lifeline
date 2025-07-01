@@ -10,49 +10,34 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      HOSTNAME: ${{ secrets.EC2_HOSTNAME }}        # lifeline-kaus.duckdns.org
-      USER_NAME: ${{ secrets.EC2_USER_NAME }}      # usually ec2-user
-      PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-      DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
-      OPENAI_API_KEY:  ${{ secrets.OPENAI_API_KEY }}
-      LETSENCRYPT_EMAIL: ${{ secrets.LETSENCRYPT_EMAIL }}
+      HOSTNAME:            ${{ secrets.EC2_HOSTNAME }}         # lifeline-kaus.duckdns.org
+      USER_NAME:           ${{ secrets.EC2_USER_NAME }}        # ec2-user
+      PRIVATE_KEY:         ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+      DJANGO_SECRET_KEY:   ${{ secrets.DJANGO_SECRET_KEY }}
+      OPENAI_API_KEY:      ${{ secrets.OPENAI_API_KEY }}
+      LETSENCRYPT_EMAIL:   ${{ secrets.LETSENCRYPT_EMAIL }}    # optional
 
     steps:
-    # ─────────────────────────────────────────────────────────────
-    # 1.  Check out repo
-    # ─────────────────────────────────────────────────────────────
     - uses: actions/checkout@v4
 
-    # ─────────────────────────────────────────────────────────────
-    # 2.  Build frontend (React) once, locally
-    # ─────────────────────────────────────────────────────────────
     - name: Build frontend
       working-directory: ./frontend
       run: |
         npm ci
-        npm run build        # outputs to frontend/build
+        npm run build
 
-    # ─────────────────────────────────────────────────────────────
-    # 3.  Prepare SSH key
-    # ─────────────────────────────────────────────────────────────
     - name: Write SSH key
       run: |
         echo "$PRIVATE_KEY" > private_key
         chmod 600 private_key
 
-    # ─────────────────────────────────────────────────────────────
-    # 4.  Resolve EC2 IP from hostname (Route 53 / DuckDNS etc.)
-    # ─────────────────────────────────────────────────────────────
     - name: Resolve EC2 IP
       id: resolve
       run: |
         IP=$(dig +short "$HOSTNAME" @1.1.1.1 | head -n1)
         echo "ip=$IP" >> "$GITHUB_OUTPUT"
 
-    # ─────────────────────────────────────────────────────────────
-    # 5.  Copy artefacts & script to EC2
-    # ─────────────────────────────────────────────────────────────
-    - name: Copy files to EC2
+    - name: Copy artefacts & script to EC2
       run: |
         SSH_TARGET=${{ steps.resolve.outputs.ip }}
         scp -o StrictHostKeyChecking=no -i private_key -r \
@@ -62,9 +47,6 @@ jobs:
         scp -o StrictHostKeyChecking=no -i private_key \
             deploy_script.sh               "$USER_NAME@$SSH_TARGET:/home/ec2-user/"
 
-    # ─────────────────────────────────────────────────────────────
-    # 6.  Execute deploy_script.sh on the instance
-    # ─────────────────────────────────────────────────────────────
     - name: Run deployment script on EC2
       run: |
         SSH_TARGET=${{ steps.resolve.outputs.ip }}
@@ -72,7 +54,7 @@ jobs:
           export HOSTNAME='$HOSTNAME'
           export DJANGO_SECRET_KEY='$DJANGO_SECRET_KEY'
           export OPENAI_API_KEY='$OPENAI_API_KEY'
-          export LETSENCRYPT_EMAIL='${{ env.LETSENCRYPT_EMAIL }}'
+          export LETSENCRYPT_EMAIL='$LETSENCRYPT_EMAIL'
           chmod +x ~/deploy_script.sh
           ~/deploy_script.sh
         "
