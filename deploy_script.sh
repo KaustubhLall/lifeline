@@ -57,7 +57,9 @@ WantedBy=multi-user.target
 EOF
 
 # ─── 7. SINGLE NGINX VHOST  (never edited again) ───────────────────────
+sudo rm -f /etc/nginx/conf.d/lifeline.conf
 sudo tee /etc/nginx/conf.d/lifeline.conf >/dev/null <<EOF
+
 server {
     listen 80;
     server_name ${HOSTNAME} ${WWW};
