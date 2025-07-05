@@ -41,6 +41,11 @@ jobs:
       id: resolve
       run: |
         IP=$(dig +short "$HOSTNAME" @1.1.1.1 | head -n1)
+        echo "Resolved IP: $IP"
+        if [ -z "$IP" ]; then
+          echo "Failed to resolve IP for $HOSTNAME"
+          exit 1
+        fi
         echo "ip=$IP" >> "$GITHUB_OUTPUT"
 
     # ─────────────────────────────────────────────────────────────
@@ -49,6 +54,14 @@ jobs:
     - name: Copy artefacts and deploy script
       run: |
         SSH_TARGET=${{ steps.resolve.outputs.ip }}
+        echo "Copying files to $SSH_TARGET"
+        
+        # Ensure frontend build directory exists and has content
+        if [ ! -d "frontend/build" ] || [ -z "$(ls -A frontend/build)" ]; then
+          echo "Error: frontend/build directory is empty or doesn't exist"
+          exit 1
+        fi
+        
         scp -o StrictHostKeyChecking=no -i private_key -r \
             frontend/build/*               "$USER_NAME@$SSH_TARGET:/tmp/frontend_build/"
         scp -o StrictHostKeyChecking=no -i private_key -r \
