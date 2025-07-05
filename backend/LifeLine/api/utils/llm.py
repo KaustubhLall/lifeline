@@ -5,6 +5,7 @@ import traceback
 from typing import Optional
 
 from openai import OpenAI
+from openai import OpenAIError
 
 # Configure logging with filename and line numbers
 logging.basicConfig(
@@ -34,7 +35,18 @@ class AudioProcessingError(LLMError):
     pass
 
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Initialize client lazily to avoid issues during Django admin operations
+client = None
+
+def get_openai_client():
+    """Get or initialize the OpenAI client."""
+    global client
+    if client is None:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise OpenAIError("OPENAI_API_KEY environment variable is not set")
+        client = OpenAI(api_key=api_key)
+    return client
 
 
 def _log_call_info(func_name: str, **kwargs):
@@ -65,6 +77,7 @@ def call_llm_text(prompt: str, model: str = "gpt-4.1-nano", temperature: float =
     _log_call_info('call_llm_text', model=model, prompt_length=len(prompt), temperature=temperature)
 
     try:
+        client = get_openai_client()
         logger.info(f"Making OpenAI API call - Model: {model}, Prompt length: {len(prompt)} chars")
 
         response = client.chat.completions.create(
@@ -123,6 +136,7 @@ def call_llm_transcribe(audio_file_path: str, model: str = "gpt-4o-mini-transcri
         file_size = os.path.getsize(audio_file_path)
         logger.info(f"Transcribing audio file - Path: {audio_file_path}, Size: {file_size} bytes, Model: {model}")
 
+        client = get_openai_client()
         with open(audio_file_path, "rb") as audio_file:
             transcript = client.audio.transcriptions.create(
                 model=model,
@@ -168,6 +182,7 @@ def call_llm_transcribe_memory(audio_file, model: str = "gpt-4o-mini-transcribe"
 
         logger.info(f"Transcribing audio from memory - Size: {file_size} bytes, Model: {model}")
 
+        client = get_openai_client()
         transcript = client.audio.transcriptions.create(
             model=model,
             file=audio_file
@@ -205,6 +220,7 @@ def call_llm_TTS(text: str, model: str = "tts-1", voice: str = "alloy") -> Optio
     try:
         logger.info(f"Converting text to speech - Model: {model}, Voice: {voice}, Text length: {len(text)} chars")
 
+        client = get_openai_client()
         response = client.audio.speech.create(
             model=model,
             input=text,
@@ -240,6 +256,7 @@ def call_llm_embedding(text: str, model: str = "text-embedding-3-small") -> list
     try:
         logger.info(f"Generating embedding - Model: {model}, Text length: {len(text)} chars")
 
+        client = get_openai_client()
         response = client.embeddings.create(
             model=model,
             input=text

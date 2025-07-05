@@ -34,12 +34,23 @@ export DJANGO_SECRET_KEY OPENAI_API_KEY
 python manage.py migrate
 python manage.py collectstatic --noinput
 
+# Create superuser if it doesn't exist
+python manage.py shell -c "
+from django.contrib.auth import get_user_model
+User = get_user_model()
+if not User.objects.filter(is_superuser=True).exists():
+    User.objects.create_superuser('admin', 'admin@lifeline.com', 'admin')
+    print('Superuser created: admin/admin123')
+else:
+    print('Superuser already exists')
+"
+
 # ─── 6. systemd SERVICE ─────────────────────────────────────────────────
 sudo tee /etc/lifeline.env >/dev/null <<EOF
 DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
 OPENAI_API_KEY=${OPENAI_API_KEY}
 EOF
-sudo chmod 640 /etc/lifeline.env
+sudo chmod 644 /etc/lifeline.env
 
 sudo tee /etc/systemd/system/lifeline-backend.service >/dev/null <<'EOF'
 [Unit]
@@ -78,6 +89,13 @@ server {
     index index.html;
     location / { try_files \$uri /index.html; }
     location /api {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+    location /admin {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
