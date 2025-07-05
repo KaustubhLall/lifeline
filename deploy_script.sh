@@ -107,12 +107,34 @@ EOF
 sudo nginx -t
 sudo systemctl start nginx   # for ACME challenge
 
-# ─── 8. DNS CHECK ───────────────────────────────────────────────────────
+# ─── 8. DNS CHECK & UPDATE ──────────────────────────────────────────────
 PUB=$(curl -s http://checkip.amazonaws.com/)
+echo "Current EC2 public IP: $PUB"
+
+# Update DuckDNS record if DUCKDNS_TOKEN is available
+if [[ -n "${DUCKDNS_TOKEN:-}" ]]; then
+  echo "Updating DuckDNS record..."
+  DUCKDNS_DOMAIN=$(echo "$HOSTNAME" | sed 's/\.duckdns\.org$//')
+  curl -s "https://www.duckdns.org/update?domains=${DUCKDNS_DOMAIN}&token=${DUCKDNS_TOKEN}&ip=${PUB}"
+  echo "DuckDNS update completed"
+
+  # Wait a moment for DNS propagation
+  sleep 10
+fi
+
+# Check DNS resolution
 for R in 8.8.8.8 1.1.1.1; do
   A=$(dig +short "${HOSTNAME}" @$R | head -n1)
-  [[ "$A" == "$PUB" ]] || { echo "DNS $R not ready"; exit 1; }
+  echo "DNS server $R resolves $HOSTNAME to: $A"
+  echo "Expected IP: $PUB"
+
+  if [[ "$A" != "$PUB" ]]; then
+    echo "DNS $R not ready - resolved IP ($A) doesn't match EC2 IP ($PUB)"
+    echo "Please update your DuckDNS record manually or add DUCKDNS_TOKEN to secrets"
+    exit 1
+  fi
 done
+echo "DNS check passed"
 
 # ─── 9. CERTBOT (fetch only, no nginx edits) ────────────────────────────
 sudo certbot certonly -n --agree-tos -m "$LE_EMAIL" \
