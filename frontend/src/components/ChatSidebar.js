@@ -1,9 +1,19 @@
 import React from 'react';
 import '../styles/components/ChatSidebar.css';
 
-function ChatSidebar({conversations, currentId, onSelect, onNewChat}) {
+function ChatSidebar({conversations, currentId, onSelect, onNewChat, onClose}) {
     return (
         <div className="chat-sidebar">
+            <div className="sidebar-header">
+                <h3 className="sidebar-title">Conversations</h3>
+                <button
+                    className="sidebar-close-btn"
+                    onClick={onClose}
+                    aria-label="Close sidebar"
+                >
+                    <i className="bi bi-x"></i>
+                </button>
+            </div>
             <button
                 className="new-chat-button"
                 onClick={onNewChat}
