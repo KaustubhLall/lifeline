@@ -49,45 +49,159 @@ system prompts.
 
 ```mermaid
 flowchart TD
-  subgraph Frontend [React SPA]
-    A[App]
-    A --> B[Components]
-    A --> C[Hooks]
-    A --> D[Utils]
-  end
-  subgraph Backend [Django REST API]
-    E[API View Layer]
-    E --> F[Serializers]
-    E --> G[Models]
-    E --> H[LLM Utils]
-    E --> I[Memory Utils]
-    E --> J[Prompt Utils]
-  end
-  B & C & D -->|HTTP/JSON| E
-  G -->|ORM| Database[(SQLite/Postgres)]
-  E -->|OpenAI API| OpenAI[(OpenAI Service)
-]
+    subgraph Frontend ["React SPA"]
+        A[App Component]
+        B[UI Components]
+        C[Custom Hooks]
+        D[Utilities]
+    end
+    
+    subgraph Backend ["Django REST API"]
+        E[Views & Endpoints]
+        F[Serializers]
+        G[Models]
+        H[LLM Utils]
+        I[Memory Utils]
+        J[Prompt Utils]
+    end
+    
+    subgraph External ["External Services"]
+        K[OpenAI API]
+        L[Database]
+    end
+    
+    Frontend -->|HTTP/JSON| Backend
+    Backend -->|API Calls| K
+    Backend -->|ORM| L
 ```
 
-### UML Architecture Diagram
+### System Architecture
 
-### Frontend (React)
-
+```mermaid
+graph TB
+    subgraph Client ["Client Layer"]
+        UI[React Frontend]
+        STT[Speech-to-Text]
+        Auth[Authentication]
+    end
+    
+    subgraph API ["API Layer"]
+        REST[Django REST Framework]
+        Views[API Views]
+        Middleware[CSRF/Auth Middleware]
+    end
+    
+    subgraph Business ["Business Logic"]
+        Memory[Memory Management]
+        RAG[RAG Engine] 
+        Prompts[Prompt Engineering]
+        LLM[LLM Integration]
+    end
+    
+    subgraph Data ["Data Layer"]
+        Models[Django Models]
+        DB[(SQLite Database)]
+        Embeddings[Vector Embeddings]
+    end
+    
+    subgraph External ["External Services"]
+        OpenAI[OpenAI API]
+        Whisper[Whisper STT]
+    end
+    
+    UI --> REST
+    STT --> REST
+    Auth --> REST
+    REST --> Views
+    Views --> Middleware
+    Views --> Memory
+    Views --> RAG
+    Memory --> Models
+    RAG --> LLM
+    RAG --> Prompts
+    LLM --> OpenAI
+    STT --> Whisper
+    Models --> DB
+    Memory --> Embeddings
 ```
-frontend/src/
-├── components/
-│   ├── ChatInput.js          # Message input with STT
-│   ├── ChatWindow.js         # Message display
-│   ├── ChatSidebar.js        # Conversation list
-│   ├── Header.js             # App header with controls
-│   └── Auth components       # Login/Signup
-├── hooks/
-│   ├── useAuth.js            # Authentication state
-│   ├── useConversations.js   # Chat management
-│   ├── useSpeechToText.js    # STT functionality
-│   └── useMobileLayout.js    # Responsive layout
-└── pages/
-    └── App.js                # Main application
+
+### UML Class Diagram
+
+```mermaid
+classDiagram
+    class User {
+        +int id
+        +string username
+        +string email
+        +datetime date_joined
+        +bool is_active
+    }
+    
+    class Conversation {
+        +int id
+        +string title
+        +datetime created_at
+        +datetime updated_at
+        +bool is_archived
+        +json context
+        +get_message_count()
+    }
+    
+    class Message {
+        +int id
+        +string content
+        +datetime created_at
+        +bool is_bot
+        +string role
+        +json metadata
+        +string full_prompt
+        +string raw_user_input
+    }
+    
+    class Memory {
+        +int id
+        +string content
+        +string title
+        +string memory_type
+        +float importance_score
+        +json embedding
+        +json tags
+        +datetime created_at
+        +int access_count
+        +bool is_auto_extracted
+        +update_access()
+    }
+    
+    class PromptDebug {
+        +int id
+        +string full_prompt
+        +string system_prompt
+        +string memory_context
+        +string model_used
+        +string mode_used
+        +int prompt_tokens
+        +int response_tokens
+        +int memories_used_count
+        +int response_time_ms
+        +datetime created_at
+    }
+    
+    class MessageNote {
+        +int id
+        +string note
+        +datetime created_at
+    }
+    
+    User ||--o{ Conversation : owns
+    User ||--o{ Message : sends
+    User ||--o{ Memory : has
+    User ||--o{ MessageNote : creates
+    Conversation ||--o{ Message : contains
+    Conversation ||--o{ Memory : generates
+    Conversation ||--o{ PromptDebug : logs
+    Message ||--o{ MessageNote : annotated_with
+    Message ||--o{ Memory : extracts
+    Message ||--|| PromptDebug : debugged_by
 ```
 
 ## 🚀 Getting Started
