@@ -89,7 +89,7 @@ server {
     index index.html;
     location / { try_files \$uri /index.html; }
     location /static/ {
-        alias /home/ec2-user/lifeline/backend/LifeLine/staticfiles/;
+        alias /home/ec2-user/lifeline/frontend/static/;
         expires 30d;
         add_header Cache-Control "public, immutable";
     }
