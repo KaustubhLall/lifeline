@@ -3,6 +3,7 @@ import '../styles/components/ChatInput.css';
 
 function ChatInput({onSend, onSTT, input, setInput, sttActive, sttSupported}) {
     const textareaRef = useRef(null);
+    const formRef = useRef(null);
 
     const handleSTTClick = async () => {
         console.log('STT button clicked!', {sttSupported, sttActive});
@@ -25,7 +26,8 @@ function ChatInput({onSend, onSTT, input, setInput, sttActive, sttSupported}) {
 
     const adjustTextareaHeight = () => {
         const textarea = textareaRef.current;
-        if (textarea) {
+        const form = formRef.current;
+        if (textarea && form) {
             // Reset height to auto to get the correct scrollHeight
             textarea.style.height = 'auto';
 
@@ -36,6 +38,13 @@ function ChatInput({onSend, onSTT, input, setInput, sttActive, sttSupported}) {
 
             const newHeight = Math.min(Math.max(scrollHeight, minHeight), maxHeight);
             textarea.style.height = `${newHeight}px`;
+
+            // Add expanded class when textarea grows beyond single line
+            if (newHeight > minHeight + 10) { // Add some tolerance
+                form.classList.add('expanded');
+            } else {
+                form.classList.remove('expanded');
+            }
         }
     };
 
@@ -54,6 +63,7 @@ function ChatInput({onSend, onSTT, input, setInput, sttActive, sttSupported}) {
 
     return (
         <form
+            ref={formRef}
             className="chat-input-form"
             onSubmit={e => {
                 e.preventDefault();
