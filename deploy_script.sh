@@ -39,7 +39,7 @@ python manage.py shell -c "
 from django.contrib.auth import get_user_model
 User = get_user_model()
 if not User.objects.filter(is_superuser=True).exists():
-    User.objects.create_superuser('admin', 'admin@lifeline.com', 'admin')
+    User.objects.create_superuser('admin', 'admin@lifeline.com', 'admin123')
     print('Superuser created: admin/admin123')
 else:
     print('Superuser already exists')
@@ -88,6 +88,11 @@ server {
     root /home/ec2-user/lifeline/frontend;
     index index.html;
     location / { try_files \$uri /index.html; }
+    location /static/ {
+        alias /home/ec2-user/lifeline/backend/LifeLine/staticfiles/;
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+    }
     location /api {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host \$host;
@@ -101,6 +106,13 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-Port \$server_port;
+
+        # CSRF and session handling
+        proxy_cookie_path / /;
+        proxy_cookie_domain ~ \$host;
+        proxy_redirect off;
     }
 }
 EOF
