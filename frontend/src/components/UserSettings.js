@@ -1,6 +1,6 @@
-import React, {useState, useEffect} from 'react';
+import React, {useEffect, useState} from 'react';
 import '../styles/components/UserSettings.css';
-import {fetchWithAuth, API_BASE} from '../utils/apiUtils';
+import {API_BASE, fetchWithAuth} from '../utils/apiUtils';
 
 function UserSettings({onClose, username, userId}) {
     const [activeTab, setActiveTab] = useState('profile');
