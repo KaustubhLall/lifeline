@@ -233,7 +233,7 @@ function UserSettings({onClose, username, userId}) {
         if (memory.is_auto_extracted) {
             tags.push({
                 type: 'auto-extracted',
-                label: 'Auto-extracted',
+                label: 'Created',
                 timestamp: memory.created_at
             });
         }
@@ -241,7 +241,7 @@ function UserSettings({onClose, username, userId}) {
         if (memory.edited_at) {
             tags.push({
                 type: 'user-edited',
-                label: 'User edited',
+                label: 'Edited',
                 timestamp: memory.edited_at
             });
         }
@@ -249,7 +249,7 @@ function UserSettings({onClose, username, userId}) {
         if (memory.last_accessed_at) {
             tags.push({
                 type: 'last-accessed',
-                label: 'Last accessed',
+                label: 'Accessed',
                 timestamp: memory.last_accessed_at
             });
         }
@@ -443,28 +443,17 @@ function UserSettings({onClose, username, userId}) {
                                     <div className="memories-list">
                                         {memories.map((memory) => (
                                             <div key={memory.id} className="memory-card">
-                                                <div className="memory-header">
-                                                    <span className="memory-date">
-                                                        Created: {formatDate(memory.created_at)}
-                                                    </span>
-                                                    <div className="memory-actions">
-                                                        {editingMemory !== memory.id && (
-                                                            <button
-                                                                className="edit-btn"
-                                                                onClick={() => startEditingMemory(memory)}
-                                                                title="Edit memory"
-                                                            >
-                                                                <i className="bi bi-pencil"></i>
-                                                            </button>
-                                                        )}
-                                                        <button
-                                                            className="delete-btn"
-                                                            onClick={() => deleteMemory(memory.id)}
-                                                            title="Delete memory"
-                                                        >
-                                                            <i className="bi bi-trash"></i>
-                                                        </button>
-                                                    </div>
+                                                <div className="memory-tags">
+                                                    {getMemoryTags(memory).map((tag, index) => (
+                                                        <span key={index} className={`memory-tag ${tag.type}`}>
+                                                            {tag.label}
+                                                            {tag.timestamp && (
+                                                                <span className="tag-timestamp">
+                                                                    ({formatRelativeTime(tag.timestamp)})
+                                                                </span>
+                                                            )}
+                                                        </span>
+                                                    ))}
                                                 </div>
 
                                                 {editingMemory === memory.id ? (
@@ -496,26 +485,33 @@ function UserSettings({onClose, username, userId}) {
                                                     </div>
                                                 )}
 
-                                                <div className="memory-tags">
-                                                    {getMemoryTags(memory).map((tag, index) => (
-                                                        <span key={index} className={`memory-tag ${tag.type}`}>
-                                                            {tag.label}
-                                                            {tag.timestamp && (
-                                                                <span className="tag-timestamp">
-                                                                    ({formatRelativeTime(tag.timestamp)})
-                                                                </span>
-                                                            )}
-                                                        </span>
-                                                    ))}
-                                                </div>
-
                                                 <div className="memory-meta">
                                                     <span className="memory-type">
                                                         {memory.memory_type || 'personal'}
                                                     </span>
-                                                    <span className="memory-access">
-                                                        Accessed {memory.access_count || 0} times
-                                                    </span>
+                                                    <div className="memory-meta-right">
+                                                        <span className="memory-access">
+                                                            Accessed {memory.access_count || 0} times
+                                                        </span>
+                                                        <div className="memory-actions">
+                                                            {editingMemory !== memory.id && (
+                                                                <button
+                                                                    className="edit-btn"
+                                                                    onClick={() => startEditingMemory(memory)}
+                                                                    title="Edit memory"
+                                                                >
+                                                                    <i className="bi bi-pencil"></i>
+                                                                </button>
+                                                            )}
+                                                            <button
+                                                                className="delete-btn"
+                                                                onClick={() => deleteMemory(memory.id)}
+                                                                title="Delete memory"
+                                                            >
+                                                                <i className="bi bi-trash"></i>
+                                                            </button>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
                                         ))}
