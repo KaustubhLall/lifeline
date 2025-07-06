@@ -200,8 +200,23 @@ if DEBUG:
 
 # Security settings for HTTPS
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-SECURE_SSL_REDIRECT = False  # Set to True in production with proper SSL setup
-USE_TLS = True
+SECURE_SSL_REDIRECT = False  # Nginx handles HTTPS redirect
+USE_TZ = True
+
+# CSRF settings for reverse proxy
+CSRF_TRUSTED_ORIGINS = [
+    'https://lifeline-kaus.duckdns.org',
+    'https://www.lifeline-kaus.duckdns.org',
+]
+
+# Session settings for admin
+SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_HTTPONLY = True
+CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_HTTPONLY = True
+
+# Trust proxy headers
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # Session and CSRF settings for cross-origin requests
 SESSION_COOKIE_SECURE = False  # Set to True in production
