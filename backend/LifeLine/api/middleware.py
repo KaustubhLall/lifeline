@@ -54,12 +54,17 @@ class APICSRFExemptMiddleware(MiddlewareMixin):
         )
 
         if should_exempt:
-            # Additional security: For non-auth endpoints, prefer token auth
-            has_auth_header = "HTTP_AUTHORIZATION" in request.META
+            # Authentication endpoints (login/register/health) should always be exempt
             is_auth_endpoint = path in ["/api/login/", "/api/register/", "/api/health/"]
+            has_auth_header = "HTTP_AUTHORIZATION" in request.META
 
-            if is_auth_endpoint or has_auth_header:
-                logger.debug(f"Exempting {path} from CSRF protection (API endpoint with proper auth)")
+            if is_auth_endpoint:
+                # Always exempt auth endpoints - they don't need Authorization headers
+                logger.debug(f"Exempting {path} from CSRF protection (authentication endpoint)")
+                setattr(view_func, "csrf_exempt", True)
+            elif has_auth_header:
+                # Other API endpoints need Authorization header
+                logger.debug(f"Exempting {path} from CSRF protection (API endpoint with Authorization header)")
                 setattr(view_func, "csrf_exempt", True)
             else:
                 logger.warning(f"API endpoint {path} accessed without Authorization header - keeping CSRF protection")
