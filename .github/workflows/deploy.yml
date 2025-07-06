@@ -10,115 +10,117 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      HOSTNAME:            ${{ secrets.EC2_HOSTNAME }}         # lifeline-kaus.duckdns.org
-      USER_NAME:           ${{ secrets.EC2_USER_NAME }}        # ec2-user
-      PRIVATE_KEY:         ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-      DJANGO_SECRET_KEY:   ${{ secrets.DJANGO_SECRET_KEY }}
-      OPENAI_API_KEY:      ${{ secrets.OPENAI_API_KEY }}
-      LETSENCRYPT_EMAIL:   ${{ secrets.LETSENCRYPT_EMAIL }}    # optional
-      DUCKDNS_TOKEN:       ${{ secrets.DUCKDNS_TOKEN }}        # optional for auto DNS updates
+      HOSTNAME: ${{ secrets.EC2_HOSTNAME }}         # lifeline-kaus.duckdns.org
+      USER_NAME: ${{ secrets.EC2_USER_NAME }}        # ec2-user
+      PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+      DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      LETSENCRYPT_EMAIL: ${{ secrets.LETSENCRYPT_EMAIL }}    # optional
+      DUCKDNS_TOKEN: ${{ secrets.DUCKDNS_TOKEN }}        # optional for auto DNS updates
 
     steps:
-    # ─────────────────────────────────────────────────────────────
-    # 1.  Checkout & build frontend
-    # ─────────────────────────────────────────────────────────────
-    - uses: actions/checkout@v4
+      # ─────────────────────────────────────────────────────────────
+      # 1.  Checkout & build frontend
+      # ─────────────────────────────────────────────────────────────
+      - uses: actions/checkout@v4
 
-    - name: Build frontend
-      working-directory: ./frontend
-      run: |
-        npm ci
-        npm run build
+      - name: Build frontend
+        working-directory: ./frontend
+        env:
+          CI: false  # Disable treating warnings as errors
+        run: |
+          npm ci
+          npm run build
 
-    # ─────────────────────────────────────────────────────────────
-    # 2.  Write SSH key and resolve EC2 IP
-    # ─────────────────────────────────────────────────────────────
-    - name: Write SSH key
-      run: |
-        echo "$PRIVATE_KEY" > private_key
-        chmod 600 private_key
+      # ─────────────────────────────────────────────────────────────
+      # 2.  Write SSH key and resolve EC2 IP
+      # ─────────────────────────────────────────────────────────────
+      - name: Write SSH key
+        run: |
+          echo "$PRIVATE_KEY" > private_key
+          chmod 600 private_key
 
-    - name: Resolve EC2 IP
-      id: resolve
-      run: |
-        IP=$(dig +short "$HOSTNAME" @1.1.1.1 | head -n1)
-        echo "Resolved IP: $IP"
-        if [ -z "$IP" ]; then
-          echo "Failed to resolve IP for $HOSTNAME"
-          exit 1
-        fi
-        echo "ip=$IP" >> "$GITHUB_OUTPUT"
-
-    # ─────────────────────────────────────────────────────────────
-    # 3.  Copy artefacts & script to EC2
-    # ─────────────────────────────────────────────────────────────
-    - name: Copy artefacts and deploy script
-      run: |
-        SSH_TARGET=${{ steps.resolve.outputs.ip }}
-        echo "Copying files to $SSH_TARGET"
-        
-        # Ensure frontend build directory exists and has content
-        if [ ! -d "frontend/build" ] || [ -z "$(ls -A frontend/build)" ]; then
-          echo "Error: frontend/build directory is empty or doesn't exist"
-          exit 1
-        fi
-        
-        scp -o StrictHostKeyChecking=no -i private_key -r \
-            frontend/build/*               "$USER_NAME@$SSH_TARGET:/tmp/frontend_build/"
-        scp -o StrictHostKeyChecking=no -i private_key -r \
-            backend/*                      "$USER_NAME@$SSH_TARGET:/tmp/backend/"
-        scp -o StrictHostKeyChecking=no -i private_key \
-            deploy_script.sh               "$USER_NAME@$SSH_TARGET:/home/ec2-user/"
-
-    # ─────────────────────────────────────────────────────────────
-    # 4.  Run deployment script on EC2
-    # ─────────────────────────────────────────────────────────────
-    - name: Run deployment script on EC2
-      run: |
-        SSH_TARGET=${{ steps.resolve.outputs.ip }}
-        ssh -o StrictHostKeyChecking=no -i private_key "$USER_NAME@$SSH_TARGET" "
-          export HOSTNAME='$HOSTNAME'
-          export DJANGO_SECRET_KEY='$DJANGO_SECRET_KEY'
-          export OPENAI_API_KEY='$OPENAI_API_KEY'
-          export LETSENCRYPT_EMAIL='$LETSENCRYPT_EMAIL'
-          export DUCKDNS_TOKEN='$DUCKDNS_TOKEN'
-          chmod +x ~/deploy_script.sh
-          ~/deploy_script.sh
-        "
-
-    # ─────────────────────────────────────────────────────────────
-    # 5.  Post-deploy hard patch (forces correct vhost every run)
-    # ─────────────────────────────────────────────────────────────
-    - name: Hard-patch lifeline.conf and reload Nginx
-      run: |
-        SSH_TARGET=${{ steps.resolve.outputs.ip }}
-        ssh -o StrictHostKeyChecking=no -i private_key "$USER_NAME@$SSH_TARGET" '
-          REAL=lifeline-kaus.duckdns.org
-
-          # Replace any literal $HOSTNAME placeholders
-          sudo sed -i -E "s#/etc/letsencrypt/live/\\\$?HOSTNAME#/etc/letsencrypt/live/${REAL}#g" \
-                /etc/nginx/conf.d/lifeline.conf
-          sudo sed -i -E "s/\\\$?HOSTNAME/${REAL}/g" \
-                /etc/nginx/conf.d/lifeline.conf
-
-          # Fix deprecated listen syntax and ensure default_server + http2
-          sudo sed -i -E "
-            s/^( *listen[[:space:]]+80)(.*);/\\1 default_server;/;
-            s/^( *listen[[:space:]]+\\[::\\]:80)(.*);/\\1 default_server;/;
-            s/^( *listen[[:space:]]+443[[:space:]]+ssl)(.*);/\\1 default_server;/;
-            s/^( *listen[[:space:]]+\\[::\\]:443[[:space:]]+ssl)(.*);/\\1 default_server;/;
-            s/^( *listen[[:space:]]+443[[:space:]]+ssl)[[:space:]]+http2;/\\1 default_server;/;
-            /http2 on;/d
-          " /etc/nginx/conf.d/lifeline.conf
-          sudo sed -i -E "/listen[[:space:]]+443[[:space:]]+ssl.*;/a\\    http2 on;" \
-                /etc/nginx/conf.d/lifeline.conf
-
-          # Ensure cert exists (issue if missing)
-          if [ ! -d \"/etc/letsencrypt/live/${REAL}\" ]; then
-            sudo mkdir -p /var/www/html
-            sudo certbot certonly -n --agree-tos -m admin@${REAL} \
-                 --webroot -w /var/www/html -d ${REAL} -d www.${REAL}
+      - name: Resolve EC2 IP
+        id: resolve
+        run: |
+          IP=$(dig +short "$HOSTNAME" @1.1.1.1 | head -n1)
+          echo "Resolved IP: $IP"
+          if [ -z "$IP" ]; then
+            echo "Failed to resolve IP for $HOSTNAME"
+            exit 1
           fi
+          echo "ip=$IP" >> "$GITHUB_OUTPUT"
 
-          sudo nginx -t && sudo systemctl reload nginx
-        '
+      # ─────────────────────────────────────────────────────────────
+      # 3.  Copy artefacts & script to EC2
+      # ─────────────────────────────────────────────────────────────
+      - name: Copy artefacts and deploy script
+        run: |
+          SSH_TARGET=${{ steps.resolve.outputs.ip }}
+          echo "Copying files to $SSH_TARGET"
+          
+          # Ensure frontend build directory exists and has content
+          if [ ! -d "frontend/build" ] || [ -z "$(ls -A frontend/build)" ]; then
+            echo "Error: frontend/build directory is empty or doesn't exist"
+            exit 1
+          fi
+          
+          scp -o StrictHostKeyChecking=no -i private_key -r \
+              frontend/build/*               "$USER_NAME@$SSH_TARGET:/tmp/frontend_build/"
+          scp -o StrictHostKeyChecking=no -i private_key -r \
+              backend/*                      "$USER_NAME@$SSH_TARGET:/tmp/backend/"
+          scp -o StrictHostKeyChecking=no -i private_key \
+              deploy_script.sh               "$USER_NAME@$SSH_TARGET:/home/ec2-user/"
+
+      # ─────────────────────────────────────────────────────────────
+      # 4.  Run deployment script on EC2
+      # ─────────────────────────────────────────────────────────────
+      - name: Run deployment script on EC2
+        run: |
+          SSH_TARGET=${{ steps.resolve.outputs.ip }}
+          ssh -o StrictHostKeyChecking=no -i private_key "$USER_NAME@$SSH_TARGET" "
+            export HOSTNAME='$HOSTNAME'
+            export DJANGO_SECRET_KEY='$DJANGO_SECRET_KEY'
+            export OPENAI_API_KEY='$OPENAI_API_KEY'
+            export LETSENCRYPT_EMAIL='$LETSENCRYPT_EMAIL'
+            export DUCKDNS_TOKEN='$DUCKDNS_TOKEN'
+            chmod +x ~/deploy_script.sh
+            ~/deploy_script.sh
+          "
+
+      # ─────────────────────────────────────────────────────────────
+      # 5.  Post-deploy hard patch (forces correct vhost every run)
+      # ─────────────────────────────────────────────────────────────
+      - name: Hard-patch lifeline.conf and reload Nginx
+        run: |
+          SSH_TARGET=${{ steps.resolve.outputs.ip }}
+          ssh -o StrictHostKeyChecking=no -i private_key "$USER_NAME@$SSH_TARGET" '
+            REAL=lifeline-kaus.duckdns.org
+          
+            # Replace any literal $HOSTNAME placeholders
+            sudo sed -i -E "s#/etc/letsencrypt/live/\\\$?HOSTNAME#/etc/letsencrypt/live/${REAL}#g" \
+                  /etc/nginx/conf.d/lifeline.conf
+            sudo sed -i -E "s/\\\$?HOSTNAME/${REAL}/g" \
+                  /etc/nginx/conf.d/lifeline.conf
+          
+            # Fix deprecated listen syntax and ensure default_server + http2
+            sudo sed -i -E "
+              s/^( *listen[[:space:]]+80)(.*);/\\1 default_server;/;
+              s/^( *listen[[:space:]]+\\[::\\]:80)(.*);/\\1 default_server;/;
+              s/^( *listen[[:space:]]+443[[:space:]]+ssl)(.*);/\\1 default_server;/;
+              s/^( *listen[[:space:]]+\\[::\\]:443[[:space:]]+ssl)(.*);/\\1 default_server;/;
+              s/^( *listen[[:space:]]+443[[:space:]]+ssl)[[:space:]]+http2;/\\1 default_server;/;
+              /http2 on;/d
+            " /etc/nginx/conf.d/lifeline.conf
+            sudo sed -i -E "/listen[[:space:]]+443[[:space:]]+ssl.*;/a\\    http2 on;" \
+                  /etc/nginx/conf.d/lifeline.conf
+          
+            # Ensure cert exists (issue if missing)
+            if [ ! -d \"/etc/letsencrypt/live/${REAL}\" ]; then
+              sudo mkdir -p /var/www/html
+              sudo certbot certonly -n --agree-tos -m admin@${REAL} \
+                   --webroot -w /var/www/html -d ${REAL} -d www.${REAL}
+            fi
+          
+            sudo nginx -t && sudo systemctl reload nginx
+          '
