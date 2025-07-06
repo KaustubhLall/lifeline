@@ -1,6 +1,6 @@
 import logging
-from typing import List, Dict, Optional
 from datetime import datetime
+from typing import List, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,6 @@ Guidelines:
 - Ask follow-up questions based on previous discussions
 - Be genuinely helpful while maintaining appropriate boundaries
 - Adapt your communication style to match the user's preferences over time""",
-
     "coaching": """You are LifeLine, an AI life coach focused on helping users achieve their personal and professional goals.
 You remember their goals, progress, challenges, and breakthroughs to provide continuous, personalized guidance.
 
@@ -46,7 +45,6 @@ Use memories to:
 - Recall past challenges and how they were overcome
 - Remember the user's preferred working styles and motivations
 - Track long-term patterns and growth""",
-
     "therapeutic": """You are LifeLine, a supportive AI companion designed to provide emotional support and help users process their thoughts and feelings.
 You remember important emotional contexts, coping strategies that work for the user, and ongoing situations.
 
@@ -67,7 +65,6 @@ Use memories to:
 - Maintain continuity in emotional support conversations
 
 Always prioritize user safety and well-being.""",
-
     "productivity": """You are LifeLine, an AI productivity assistant that helps users optimize their work, manage time, and achieve efficiency.
 You remember their work patterns, preferences, tools, and ongoing projects.
 
@@ -86,7 +83,6 @@ Use memories to:
 - Remember past productivity challenges and solutions
 - Track patterns in work habits and energy levels
 - Maintain context on professional goals and priorities""",
-
     "creative": """You are LifeLine, an AI creative companion that helps users explore their creativity, develop ideas, and overcome creative blocks.
 You remember their creative interests, ongoing projects, and artistic journey.
 
@@ -104,7 +100,7 @@ Use memories to:
 - Track creative growth and skill development
 - Remember past creative challenges and breakthroughs
 - Maintain context on artistic goals and aspirations
-- Reference previous creative work and feedback"""
+- Reference previous creative work and feedback""",
 }
 
 # Memory integration templates
@@ -113,21 +109,18 @@ MEMORY_CONTEXT_TEMPLATES = {
 {memories}
 
 """,
-
     "goal_tracking": """## Your Goals & Progress:
 {memories}
 
 """,
-
     "ongoing_situations": """## Ongoing Situations We've Discussed:
 {memories}
 
 """,
-
     "preferences_learned": """## Your Preferences & Style:
 {memories}
 
-"""
+""",
 }
 
 # Conversation history formatting
@@ -136,18 +129,19 @@ CONVERSATION_TEMPLATES = {
 {conversation_history}
 
 """,
-
     "continuation": """## Continuing Our Conversation:
 {conversation_history}
 
-User: {current_message}"""
+User: {current_message}""",
 }
+
 
 def get_system_prompt(mode: str = "conversational") -> str:
     """Get the system prompt for the specified chat mode."""
     prompt = SYSTEM_PROMPTS.get(mode, SYSTEM_PROMPTS["conversational"])
     logger.debug(f"Retrieved system prompt for mode: {mode}")
     return prompt
+
 
 def format_memory_context(memories: List[Dict], context_type: str = "personal_context") -> str:
     """
@@ -167,7 +161,7 @@ def format_memory_context(memories: List[Dict], context_type: str = "personal_co
         # Group memories by type for better organization
         memory_groups = {}
         for memory in memories:
-            mem_type = memory.get('memory_type', 'personal')
+            mem_type = memory.get("memory_type", "personal")
             if mem_type not in memory_groups:
                 memory_groups[mem_type] = []
             memory_groups[mem_type].append(memory)
@@ -176,20 +170,20 @@ def format_memory_context(memories: List[Dict], context_type: str = "personal_co
         formatted_memories = []
 
         for mem_type, mem_list in memory_groups.items():
-            if mem_type == 'goal':
+            if mem_type == "goal":
                 formatted_memories.append("### Goals & Objectives:")
-            elif mem_type == 'preference':
+            elif mem_type == "preference":
                 formatted_memories.append("### Personal Preferences:")
-            elif mem_type == 'relationship':
+            elif mem_type == "relationship":
                 formatted_memories.append("### Relationships & People:")
-            elif mem_type == 'experience':
+            elif mem_type == "experience":
                 formatted_memories.append("### Important Experiences:")
             else:
                 formatted_memories.append("### Personal Information:")
 
             for memory in mem_list:
-                title = memory.get('title', '').strip()
-                content = memory.get('content', '').strip()
+                title = memory.get("title", "").strip()
+                content = memory.get("content", "").strip()
 
                 if title and title.lower() not in content.lower():
                     formatted_memories.append(f"- **{title}**: {content}")
@@ -205,6 +199,7 @@ def format_memory_context(memories: List[Dict], context_type: str = "personal_co
     except Exception as e:
         logger.error(f"Error formatting memory context: {str(e)}")
         return ""
+
 
 def format_conversation_history(messages: List[Dict], max_tokens: int = 10000) -> str:
     """
@@ -231,9 +226,9 @@ def format_conversation_history(messages: List[Dict], max_tokens: int = 10000) -
 
         # Process messages in reverse order (most recent first)
         for message in reversed(messages):
-            role = message.get('role', 'user')
-            content = message.get('content', '').strip()
-            timestamp = message.get('created_at', '')
+            role = message.get("role", "user")
+            content = message.get("content", "").strip()
+            timestamp = message.get("created_at", "")
 
             if not content:
                 continue
@@ -243,7 +238,7 @@ def format_conversation_history(messages: List[Dict], max_tokens: int = 10000) -
                 try:
                     # Parse timestamp and format nicely
                     if isinstance(timestamp, str):
-                        dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                        dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
                         time_str = dt.strftime("%H:%M")
                         formatted_msg = f"[{time_str}] {role.title()}: {content}"
                     else:
@@ -276,8 +271,8 @@ def format_conversation_history(messages: List[Dict], max_tokens: int = 10000) -
         formatted_messages = []
 
         for message in recent_messages:
-            role = message.get('role', 'user')
-            content = message.get('content', '').strip()
+            role = message.get("role", "user")
+            content = message.get("content", "").strip()
             if content:
                 formatted_messages.append(f"{role.title()}: {content}")
 
@@ -287,13 +282,14 @@ def format_conversation_history(messages: List[Dict], max_tokens: int = 10000) -
         logger.error(f"Error formatting conversation history: {str(e)}")
         return ""
 
+
 def build_enhanced_prompt(
     mode: str = "conversational",
     memories: List[Dict] = None,
     conversation_history: List[Dict] = None,
     current_message: str = "",
     user_name: str = "",
-    max_history_tokens: int = 10000
+    max_history_tokens: int = 10000,
 ) -> str:
     """
     Build a comprehensive prompt with system instructions, memories, and conversation context.
@@ -337,9 +333,11 @@ def build_enhanced_prompt(
 
         full_prompt = "\n".join(prompt_parts)
 
-        logger.info(f"Built enhanced prompt: mode={mode}, memories={len(memories) if memories else 0}, "
-                   f"history_messages={len(conversation_history) if conversation_history else 0}, "
-                   f"total_length={len(full_prompt)}")
+        logger.info(
+            f"Built enhanced prompt: mode={mode}, memories={len(memories) if memories else 0}, "
+            f"history_messages={len(conversation_history) if conversation_history else 0}, "
+            f"total_length={len(full_prompt)}"
+        )
 
         return full_prompt
 
@@ -351,14 +349,17 @@ def build_enhanced_prompt(
             basic_prompt += f"\n\nUser: {current_message}"
         return basic_prompt
 
+
 # Additional utility functions for prompt management
 def get_available_modes() -> List[str]:
     """Get list of available chat modes."""
     return list(SYSTEM_PROMPTS.keys())
 
+
 def validate_mode(mode: str) -> bool:
     """Check if a chat mode is valid."""
     return mode in SYSTEM_PROMPTS
+
 
 def get_mode_description(mode: str) -> str:
     """Get a brief description of what each mode does."""
@@ -367,6 +368,6 @@ def get_mode_description(mode: str) -> str:
         "coaching": "Goal-oriented coaching and personal development support",
         "therapeutic": "Emotional support and processing (not professional therapy)",
         "productivity": "Work efficiency, time management, and productivity optimization",
-        "creative": "Creative projects, brainstorming, and artistic development"
+        "creative": "Creative projects, brainstorming, and artistic development",
     }
     return descriptions.get(mode, "Unknown mode")

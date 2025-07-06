@@ -1,10 +1,13 @@
 from django.db import models
+
 from .user_auth import User
+
 
 # Create your models here.
 
+
 class Conversation(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='conversations')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="conversations")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     title = models.CharField(max_length=255, blank=True, null=True)
@@ -12,39 +15,51 @@ class Conversation(models.Model):
     context = models.JSONField(default=dict, blank=True)  # Store conversation context/memory
 
     class Meta:
-        ordering = ['-updated_at']
+        ordering = ["-updated_at"]
 
     def __str__(self):
         return f"{self.user.username} - {self.title or f'Chat {self.id}'}"
 
+
 class Message(models.Model):
-    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name='messages')
-    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='messages')
+    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name="messages")
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name="messages")
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     is_bot = models.BooleanField(default=False)
     metadata = models.JSONField(default=dict, blank=True)  # Store message-specific metadata
-    role = models.CharField(max_length=20, default='user')  # user, assistant, system
+    role = models.CharField(max_length=20, default="user")  # user, assistant, system
 
     # Store full prompt for debugging and prompt engineering
     full_prompt = models.TextField(blank=True, help_text="Complete prompt sent to LLM (for debugging)")
     raw_user_input = models.TextField(blank=True, help_text="Original user input before prompt construction")
 
     class Meta:
-        ordering = ['created_at']
+        ordering = ["created_at"]
 
     def __str__(self):
         role_display = "🤖" if self.is_bot else "👤"
         return f"{role_display} {self.content[:50]}..."
 
+
 class PromptDebug(models.Model):
     """Debug table to store full prompts sent to LLM for debugging"""
-    user_message = models.ForeignKey(Message, on_delete=models.CASCADE, related_name='prompt_debug',
-                                   help_text="The user message that triggered this prompt")
-    bot_response = models.ForeignKey(Message, on_delete=models.SET_NULL, null=True, blank=True,
-                                   related_name='prompt_debug_response',
-                                   help_text="The bot response generated from this prompt")
-    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name='prompt_debugs')
+
+    user_message = models.ForeignKey(
+        Message,
+        on_delete=models.CASCADE,
+        related_name="prompt_debug",
+        help_text="The user message that triggered this prompt",
+    )
+    bot_response = models.ForeignKey(
+        Message,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="prompt_debug_response",
+        help_text="The bot response generated from this prompt",
+    )
+    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name="prompt_debugs")
 
     # Full prompt data
     full_prompt = models.TextField(help_text="Complete prompt sent to LLM")
@@ -53,8 +68,8 @@ class PromptDebug(models.Model):
     conversation_history = models.TextField(blank=True, help_text="Conversation history included")
 
     # LLM call metadata
-    model_used = models.CharField(max_length=50, default='gpt-4.1-nano')
-    mode_used = models.CharField(max_length=20, default='conversational')
+    model_used = models.CharField(max_length=50, default="gpt-4.1-nano")
+    mode_used = models.CharField(max_length=20, default="conversational")
     temperature = models.FloatField(default=0.0)
 
     # Stats and metrics
@@ -76,39 +91,51 @@ class PromptDebug(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['-created_at']
+        ordering = ["-created_at"]
         verbose_name = "Prompt Debug Entry"
         verbose_name_plural = "Prompt Debug Entries"
 
     def __str__(self):
         return f"Debug {self.id} - {self.user_message.sender.username} - {self.model_used}"
 
+
 class Memory(models.Model):
     """Store user memories for RAG functionality"""
+
     MEMORY_TYPES = [
-        ('personal', 'Personal Information'),
-        ('preference', 'User Preference'),
-        ('goal', 'Goal or Objective'),
-        ('insight', 'Insight or Learning'),
-        ('fact', 'Important Fact'),
-        ('context', 'Contextual Information'),
+        ("personal", "Personal Information"),
+        ("preference", "User Preference"),
+        ("goal", "Goal or Objective"),
+        ("insight", "Insight or Learning"),
+        ("fact", "Important Fact"),
+        ("context", "Contextual Information"),
     ]
 
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='memories')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="memories")
     content = models.TextField(help_text="The memory content")
     title = models.CharField(max_length=255, blank=True, null=True, help_text="Optional title for the memory")
-    memory_type = models.CharField(max_length=20, choices=MEMORY_TYPES, default='personal')
+    memory_type = models.CharField(max_length=20, choices=MEMORY_TYPES, default="personal")
 
     # Embedding for semantic search
     embedding = models.JSONField(blank=True, null=True, help_text="Vector embedding of the memory content")
 
     # Source information
-    source_message = models.ForeignKey(Message, on_delete=models.SET_NULL, null=True, blank=True,
-                                     related_name='extracted_memories',
-                                     help_text="Original message this memory was extracted from")
-    source_conversation = models.ForeignKey(Conversation, on_delete=models.SET_NULL, null=True, blank=True,
-                                          related_name='extracted_memories',
-                                          help_text="Conversation this memory was extracted from")
+    source_message = models.ForeignKey(
+        Message,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="extracted_memories",
+        help_text="Original message this memory was extracted from",
+    )
+    source_conversation = models.ForeignKey(
+        Conversation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="extracted_memories",
+        help_text="Conversation this memory was extracted from",
+    )
 
     # Metadata and tags
     tags = models.JSONField(default=list, blank=True, help_text="Tags for categorizing memories")
@@ -128,27 +155,28 @@ class Memory(models.Model):
     extraction_confidence = models.FloatField(null=True, blank=True, help_text="Confidence score for auto-extraction")
 
     class Meta:
-        ordering = ['-updated_at', '-importance_score']
+        ordering = ["-updated_at", "-importance_score"]
         verbose_name_plural = "Memories"
         indexes = [
-            models.Index(fields=['user', 'memory_type']),
-            models.Index(fields=['user', 'importance_score']),
-            models.Index(fields=['user', 'is_auto_extracted']),
-            models.Index(fields=['user', 'access_count']),
-            models.Index(fields=['user', 'last_accessed']),
+            models.Index(fields=["user", "memory_type"]),
+            models.Index(fields=["user", "importance_score"]),
+            models.Index(fields=["user", "is_auto_extracted"]),
+            models.Index(fields=["user", "access_count"]),
+            models.Index(fields=["user", "last_accessed"]),
         ]
 
     def __str__(self):
         return self.title or f"Memory {self.id}: {self.content[:50]}..."
 
+
 class MessageNote(models.Model):
-    message = models.ForeignKey(Message, on_delete=models.CASCADE, related_name='notes')
+    message = models.ForeignKey(Message, on_delete=models.CASCADE, related_name="notes")
     note = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
-    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='message_notes')
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name="message_notes")
 
     class Meta:
-        ordering = ['-created_at']
+        ordering = ["-created_at"]
 
     def __str__(self):
         return f"Note for {self.message.id}: {self.note[:50]}..."

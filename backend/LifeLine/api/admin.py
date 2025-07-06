@@ -8,17 +8,17 @@ from .models.user_auth import User
 
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
-    list_display = ['username', 'email', 'first_name', 'last_name', 'is_active', 'date_joined']
-    list_filter = ['is_active', 'is_staff', 'date_joined']
-    search_fields = ['username', 'email', 'first_name', 'last_name']
-    readonly_fields = ['date_joined', 'last_login']
+    list_display = ["username", "email", "first_name", "last_name", "is_active", "date_joined"]
+    list_filter = ["is_active", "is_staff", "date_joined"]
+    search_fields = ["username", "email", "first_name", "last_name"]
+    readonly_fields = ["date_joined", "last_login"]
 
 
 class MessageInline(admin.TabularInline):
     model = Message
     extra = 0
-    readonly_fields = ['created_at', 'role', 'is_bot', 'content_preview', 'metadata_preview']
-    fields = ['created_at', 'role', 'is_bot', 'content_preview', 'metadata_preview']
+    readonly_fields = ["created_at", "role", "is_bot", "content_preview", "metadata_preview"]
+    fields = ["created_at", "role", "is_bot", "content_preview", "metadata_preview"]
 
     def content_preview(self, obj):
         if obj.content:
@@ -38,12 +38,12 @@ class MessageInline(admin.TabularInline):
 class PromptDebugInline(admin.TabularInline):
     model = PromptDebug
     extra = 0
-    readonly_fields = ['created_at', 'model_used', 'mode_used', 'prompt_length', 'response_time_ms', 'debug_link']
-    fields = ['created_at', 'model_used', 'mode_used', 'prompt_length', 'response_time_ms', 'debug_link']
+    readonly_fields = ["created_at", "model_used", "mode_used", "prompt_length", "response_time_ms", "debug_link"]
+    fields = ["created_at", "model_used", "mode_used", "prompt_length", "response_time_ms", "debug_link"]
 
     def debug_link(self, obj):
         if obj.id:
-            url = reverse('admin:api_promptdebug_change', args=[obj.id])
+            url = reverse("admin:api_promptdebug_change", args=[obj.id])
             return format_html('<a href="{}">View Debug Details</a>', url)
         return "-"
 
@@ -52,23 +52,16 @@ class PromptDebugInline(admin.TabularInline):
 
 @admin.register(Conversation)
 class ConversationAdmin(admin.ModelAdmin):
-    list_display = ['id', 'user', 'title', 'message_count', 'is_archived', 'created_at', 'updated_at']
-    list_filter = ['is_archived', 'created_at', 'updated_at']
-    search_fields = ['title', 'user__username', 'user__email']
-    readonly_fields = ['created_at', 'updated_at', 'message_count', 'context_display']
+    list_display = ["id", "user", "title", "message_count", "is_archived", "created_at", "updated_at"]
+    list_filter = ["is_archived", "created_at", "updated_at"]
+    search_fields = ["title", "user__username", "user__email"]
+    readonly_fields = ["created_at", "updated_at", "message_count", "context_display"]
     inlines = [MessageInline, PromptDebugInline]
 
     fieldsets = (
-        ('Basic Information', {
-            'fields': ('user', 'title', 'is_archived')
-        }),
-        ('Timestamps', {
-            'fields': ('created_at', 'updated_at', 'message_count')
-        }),
-        ('Context Data', {
-            'fields': ('context_display',),
-            'classes': ('collapse',)
-        }),
+        ("Basic Information", {"fields": ("user", "title", "is_archived")}),
+        ("Timestamps", {"fields": ("created_at", "updated_at", "message_count")}),
+        ("Context Data", {"fields": ("context_display",), "classes": ("collapse",)}),
     )
 
     def message_count(self, obj):
@@ -79,10 +72,12 @@ class ConversationAdmin(admin.ModelAdmin):
     def context_display(self, obj):
         if obj.context:
             import json
+
             formatted_context = json.dumps(obj.context, indent=2)
             return format_html(
                 '<pre style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; color: #495057; border: 1px solid #dee2e6; font-size: 13px;">{}</pre>',
-                formatted_context)
+                formatted_context,
+            )
         return '<span style="color: #6c757d; font-style: italic;">No context data</span>'
 
     context_display.short_description = "Context JSON"
@@ -90,36 +85,37 @@ class ConversationAdmin(admin.ModelAdmin):
 
 @admin.register(Message)
 class MessageAdmin(admin.ModelAdmin):
-    list_display = ['id', 'conversation_link', 'sender', 'role', 'is_bot', 'content_preview', 'has_full_prompt',
-                    'created_at']
-    list_filter = ['is_bot', 'role', 'created_at', 'conversation__user']
-    search_fields = ['content', 'raw_user_input', 'sender__username', 'conversation__title']
-    readonly_fields = ['created_at', 'content_display', 'raw_user_input_display', 'full_prompt_display',
-                       'metadata_display', 'debug_entries']
+    list_display = [
+        "id",
+        "conversation_link",
+        "sender",
+        "role",
+        "is_bot",
+        "content_preview",
+        "has_full_prompt",
+        "created_at",
+    ]
+    list_filter = ["is_bot", "role", "created_at", "conversation__user"]
+    search_fields = ["content", "raw_user_input", "sender__username", "conversation__title"]
+    readonly_fields = [
+        "created_at",
+        "content_display",
+        "raw_user_input_display",
+        "full_prompt_display",
+        "metadata_display",
+        "debug_entries",
+    ]
 
     fieldsets = (
-        ('Message Information', {
-            'fields': ('conversation', 'sender', 'role', 'is_bot', 'created_at')
-        }),
-        ('Content', {
-            'fields': ('content_display',)
-        }),
-        ('Debug Information', {
-            'fields': ('raw_user_input_display', 'full_prompt_display'),
-            'classes': ('collapse',)
-        }),
-        ('Metadata', {
-            'fields': ('metadata_display',),
-            'classes': ('collapse',)
-        }),
-        ('Related Debug Entries', {
-            'fields': ('debug_entries',),
-            'classes': ('collapse',)
-        }),
+        ("Message Information", {"fields": ("conversation", "sender", "role", "is_bot", "created_at")}),
+        ("Content", {"fields": ("content_display",)}),
+        ("Debug Information", {"fields": ("raw_user_input_display", "full_prompt_display"), "classes": ("collapse",)}),
+        ("Metadata", {"fields": ("metadata_display",), "classes": ("collapse",)}),
+        ("Related Debug Entries", {"fields": ("debug_entries",), "classes": ("collapse",)}),
     )
 
     def conversation_link(self, obj):
-        url = reverse('admin:api_conversation_change', args=[obj.conversation.id])
+        url = reverse("admin:api_conversation_change", args=[obj.conversation.id])
         return format_html('<a href="{}">{}</a>', url, obj.conversation.title or f"Conversation {obj.conversation.id}")
 
     conversation_link.short_description = "Conversation"
@@ -139,7 +135,8 @@ class MessageAdmin(admin.ModelAdmin):
     def content_display(self, obj):
         return format_html(
             '<div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; white-space: pre-wrap; color: #212529; border: 1px solid #dee2e6; font-family: monospace; font-size: 14px;">{}</div>',
-            obj.content)
+            obj.content,
+        )
 
     content_display.short_description = "Full Content"
 
@@ -147,7 +144,8 @@ class MessageAdmin(admin.ModelAdmin):
         if obj.raw_user_input:
             return format_html(
                 '<div style="background-color: #e3f2fd; padding: 15px; border-radius: 4px; white-space: pre-wrap; color: #1565c0; border: 1px solid #90caf9; font-family: monospace; font-size: 14px;"><strong style="color: #0d47a1;">Original User Input:</strong><br><br>{}</div>',
-                obj.raw_user_input)
+                obj.raw_user_input,
+            )
         return '<span style="color: #6c757d; font-style: italic;">No raw user input (this is a bot message)</span>'
 
     raw_user_input_display.short_description = "Original User Input"
@@ -156,18 +154,24 @@ class MessageAdmin(admin.ModelAdmin):
         if obj.full_prompt:
             return format_html(
                 '<div style="background-color: #fff3e0; padding: 15px; border-radius: 4px; white-space: pre-wrap; max-height: 600px; overflow-y: auto; font-family: monospace; font-size: 12px; color: #e65100; border: 1px solid #ffcc02;"><strong style="color: #bf360c;">Complete Prompt Sent to LLM ({} characters):</strong><br><br><span style="color: #ef6c00;">{}</span></div>',
-                len(obj.full_prompt), obj.full_prompt)
-        return '<span style="color: #6c757d; font-style: italic;">No full prompt (this is a bot response message)</span>'
+                len(obj.full_prompt),
+                obj.full_prompt,
+            )
+        return (
+            '<span style="color: #6c757d; font-style: italic;">No full prompt (this is a bot response message)</span>'
+        )
 
     full_prompt_display.short_description = "Complete LLM Prompt"
 
     def metadata_display(self, obj):
         if obj.metadata:
             import json
+
             formatted_metadata = json.dumps(obj.metadata, indent=2)
             return format_html(
                 '<pre style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; color: #495057; border: 1px solid #dee2e6; font-size: 13px;">{}</pre>',
-                formatted_metadata)
+                formatted_metadata,
+            )
         return '<span style="color: #6c757d; font-style: italic;">No metadata</span>'
 
     metadata_display.short_description = "Metadata JSON"
@@ -177,10 +181,11 @@ class MessageAdmin(admin.ModelAdmin):
         if debug_entries.exists():
             links = []
             for entry in debug_entries:
-                url = reverse('admin:api_promptdebug_change', args=[entry.id])
+                url = reverse("admin:api_promptdebug_change", args=[entry.id])
                 links.append(
-                    f'<a href="{url}" style="color: #007bff; text-decoration: none;">Debug Entry {entry.id}</a>')
-            return format_html('<br>'.join(links))
+                    f'<a href="{url}" style="color: #007bff; text-decoration: none;">Debug Entry {entry.id}</a>'
+                )
+            return format_html("<br>".join(links))
         return '<span style="color: #6c757d; font-style: italic;">No debug entries</span>'
 
     debug_entries.short_description = "Debug Entries"
@@ -188,49 +193,56 @@ class MessageAdmin(admin.ModelAdmin):
 
 @admin.register(PromptDebug)
 class PromptDebugAdmin(admin.ModelAdmin):
-    list_display = ['id', 'conversation_link', 'user_message_preview', 'model_used', 'mode_used',
-                    'prompt_length', 'memories_used_count', 'response_time_ms', 'created_at']
-    list_filter = ['model_used', 'mode_used', 'created_at', 'conversation__user']
-    search_fields = ['user_message__content', 'conversation__title', 'conversation__user__username']
-    readonly_fields = ['created_at', 'full_prompt_display', 'system_prompt_display',
-                       'memory_context_display', 'conversation_history_display', 'api_error_display']
+    list_display = [
+        "id",
+        "conversation_link",
+        "user_message_preview",
+        "model_used",
+        "mode_used",
+        "prompt_length",
+        "memories_used_count",
+        "response_time_ms",
+        "created_at",
+    ]
+    list_filter = ["model_used", "mode_used", "created_at", "conversation__user"]
+    search_fields = ["user_message__content", "conversation__title", "conversation__user__username"]
+    readonly_fields = [
+        "created_at",
+        "full_prompt_display",
+        "system_prompt_display",
+        "memory_context_display",
+        "conversation_history_display",
+        "api_error_display",
+    ]
 
     fieldsets = (
-        ('Debug Entry Information', {
-            'fields': ('user_message', 'bot_response', 'conversation', 'created_at')
-        }),
-        ('LLM Configuration', {
-            'fields': ('model_used', 'mode_used', 'temperature')
-        }),
-        ('Statistics', {
-            'fields': ('prompt_length', 'prompt_tokens', 'response_tokens', 'total_tokens',
-                       'response_time_ms', 'memories_used_count', 'relevant_memories_count',
-                       'conversation_memories_count', 'history_messages_count')
-        }),
-        ('Full Prompt', {
-            'fields': ('full_prompt_display',),
-            'classes': ('collapse',)
-        }),
-        ('System Prompt', {
-            'fields': ('system_prompt_display',),
-            'classes': ('collapse',)
-        }),
-        ('Memory Context', {
-            'fields': ('memory_context_display',),
-            'classes': ('collapse',)
-        }),
-        ('Conversation History', {
-            'fields': ('conversation_history_display',),
-            'classes': ('collapse',)
-        }),
-        ('Error Information', {
-            'fields': ('api_error_display',),
-            'classes': ('collapse',)
-        }),
+        ("Debug Entry Information", {"fields": ("user_message", "bot_response", "conversation", "created_at")}),
+        ("LLM Configuration", {"fields": ("model_used", "mode_used", "temperature")}),
+        (
+            "Statistics",
+            {
+                "fields": (
+                    "prompt_length",
+                    "prompt_tokens",
+                    "response_tokens",
+                    "total_tokens",
+                    "response_time_ms",
+                    "memories_used_count",
+                    "relevant_memories_count",
+                    "conversation_memories_count",
+                    "history_messages_count",
+                )
+            },
+        ),
+        ("Full Prompt", {"fields": ("full_prompt_display",), "classes": ("collapse",)}),
+        ("System Prompt", {"fields": ("system_prompt_display",), "classes": ("collapse",)}),
+        ("Memory Context", {"fields": ("memory_context_display",), "classes": ("collapse",)}),
+        ("Conversation History", {"fields": ("conversation_history_display",), "classes": ("collapse",)}),
+        ("Error Information", {"fields": ("api_error_display",), "classes": ("collapse",)}),
     )
 
     def conversation_link(self, obj):
-        url = reverse('admin:api_conversation_change', args=[obj.conversation.id])
+        url = reverse("admin:api_conversation_change", args=[obj.conversation.id])
         return format_html('<a href="{}">{}</a>', url, obj.conversation.title or f"Conversation {obj.conversation.id}")
 
     conversation_link.short_description = "Conversation"
@@ -243,7 +255,9 @@ class PromptDebugAdmin(admin.ModelAdmin):
     def full_prompt_display(self, obj):
         return format_html(
             '<div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; white-space: pre-wrap; max-height: 500px; overflow-y: auto; color: #212529; border: 1px solid #dee2e6; font-family: monospace; font-size: 12px;"><strong style="color: #495057;">Complete Prompt Sent to LLM ({} characters):</strong><br><br><span style="color: #343a40;">{}</span></div>',
-            len(obj.full_prompt), obj.full_prompt)
+            len(obj.full_prompt),
+            obj.full_prompt,
+        )
 
     full_prompt_display.short_description = "Complete Prompt Sent to LLM"
 
@@ -251,7 +265,8 @@ class PromptDebugAdmin(admin.ModelAdmin):
         if obj.system_prompt:
             return format_html(
                 '<div style="background-color: #e3f2fd; padding: 15px; border-radius: 4px; white-space: pre-wrap; color: #1565c0; border: 1px solid #90caf9; font-family: monospace; font-size: 13px;"><strong style="color: #0d47a1;">System Prompt:</strong><br><br><span style="color: #1976d2;">{}</span></div>',
-                obj.system_prompt)
+                obj.system_prompt,
+            )
         return '<span style="color: #6c757d; font-style: italic;">No system prompt</span>'
 
     system_prompt_display.short_description = "System Prompt"
@@ -260,7 +275,8 @@ class PromptDebugAdmin(admin.ModelAdmin):
         if obj.memory_context:
             return format_html(
                 '<div style="background-color: #f3e5f5; padding: 15px; border-radius: 4px; white-space: pre-wrap; color: #7b1fa2; border: 1px solid #ce93d8; font-family: monospace; font-size: 13px;"><strong style="color: #4a148c;">Memory Context:</strong><br><br><span style="color: #8e24aa;">{}</span></div>',
-                obj.memory_context)
+                obj.memory_context,
+            )
         return '<span style="color: #6c757d; font-style: italic;">No memory context</span>'
 
     memory_context_display.short_description = "Memory Context"
@@ -269,7 +285,8 @@ class PromptDebugAdmin(admin.ModelAdmin):
         if obj.conversation_history:
             return format_html(
                 '<div style="background-color: #e8f5e8; padding: 15px; border-radius: 4px; white-space: pre-wrap; max-height: 400px; overflow-y: auto; color: #2e7d32; border: 1px solid #a5d6a7; font-family: monospace; font-size: 13px;"><strong style="color: #1b5e20;">Conversation History:</strong><br><br><span style="color: #388e3c;">{}</span></div>',
-                obj.conversation_history)
+                obj.conversation_history,
+            )
         return '<span style="color: #6c757d; font-style: italic;">No conversation history</span>'
 
     conversation_history_display.short_description = "Conversation History"
@@ -278,7 +295,8 @@ class PromptDebugAdmin(admin.ModelAdmin):
         if obj.api_error:
             return format_html(
                 '<div style="background-color: #ffebee; padding: 15px; border-radius: 4px; white-space: pre-wrap; color: #c62828; border: 1px solid #ef9a9a; font-family: monospace; font-size: 13px;"><strong style="color: #b71c1c;">API Error:</strong><br><br><span style="color: #d32f2f;">{}</span></div>',
-                obj.api_error)
+                obj.api_error,
+            )
         return '<span style="color: #6c757d; font-style: italic;">No errors</span>'
 
     api_error_display.short_description = "API Error"
@@ -286,40 +304,41 @@ class PromptDebugAdmin(admin.ModelAdmin):
 
 @admin.register(Memory)
 class MemoryAdmin(admin.ModelAdmin):
-    list_display = ['id', 'user', 'title', 'memory_type', 'importance_score', 'is_auto_extracted',
-                    'access_count', 'created_at']
-    list_filter = ['memory_type', 'is_auto_extracted', 'importance_score', 'created_at', 'user']
-    search_fields = ['title', 'content', 'user__username', 'tags']
-    readonly_fields = ['created_at', 'updated_at', 'last_accessed', 'content_display',
-                       'embedding_info', 'metadata_display']
+    list_display = [
+        "id",
+        "user",
+        "title",
+        "memory_type",
+        "importance_score",
+        "is_auto_extracted",
+        "access_count",
+        "created_at",
+    ]
+    list_filter = ["memory_type", "is_auto_extracted", "importance_score", "created_at", "user"]
+    search_fields = ["title", "content", "user__username", "tags"]
+    readonly_fields = [
+        "created_at",
+        "updated_at",
+        "last_accessed",
+        "content_display",
+        "embedding_info",
+        "metadata_display",
+    ]
 
     fieldsets = (
-        ('Memory Information', {
-            'fields': ('user', 'title', 'memory_type', 'importance_score', 'is_auto_extracted')
-        }),
-        ('Content', {
-            'fields': ('content_display',)
-        }),
-        ('Source Information', {
-            'fields': ('source_message', 'source_conversation', 'extraction_confidence')
-        }),
-        ('Access Tracking', {
-            'fields': ('access_count', 'last_accessed', 'created_at', 'updated_at')
-        }),
-        ('Tags and Metadata', {
-            'fields': ('tags', 'metadata_display'),
-            'classes': ('collapse',)
-        }),
-        ('Embedding Information', {
-            'fields': ('embedding_info',),
-            'classes': ('collapse',)
-        }),
+        ("Memory Information", {"fields": ("user", "title", "memory_type", "importance_score", "is_auto_extracted")}),
+        ("Content", {"fields": ("content_display",)}),
+        ("Source Information", {"fields": ("source_message", "source_conversation", "extraction_confidence")}),
+        ("Access Tracking", {"fields": ("access_count", "last_accessed", "created_at", "updated_at")}),
+        ("Tags and Metadata", {"fields": ("tags", "metadata_display"), "classes": ("collapse",)}),
+        ("Embedding Information", {"fields": ("embedding_info",), "classes": ("collapse",)}),
     )
 
     def content_display(self, obj):
         return format_html(
             '<div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; white-space: pre-wrap; color: #495057; border: 1px solid #dee2e6; font-family: monospace; font-size: 14px;">{}</div>',
-            obj.content)
+            obj.content,
+        )
 
     content_display.short_description = "Memory Content"
 
@@ -333,10 +352,12 @@ class MemoryAdmin(admin.ModelAdmin):
     def metadata_display(self, obj):
         if obj.metadata:
             import json
+
             formatted_metadata = json.dumps(obj.metadata, indent=2)
             return format_html(
                 '<pre style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; color: #495057; border: 1px solid #dee2e6; font-size: 13px;">{}</pre>',
-                formatted_metadata)
+                formatted_metadata,
+            )
         return '<span style="color: #6c757d; font-style: italic;">No metadata</span>'
 
     metadata_display.short_description = "Metadata JSON"
@@ -344,10 +365,10 @@ class MemoryAdmin(admin.ModelAdmin):
 
 @admin.register(MessageNote)
 class MessageNoteAdmin(admin.ModelAdmin):
-    list_display = ['id', 'message_preview', 'created_by', 'created_at']
-    list_filter = ['created_at', 'created_by']
-    search_fields = ['note', 'message__content', 'created_by__username']
-    readonly_fields = ['created_at']
+    list_display = ["id", "message_preview", "created_by", "created_at"]
+    list_filter = ["created_at", "created_by"]
+    search_fields = ["note", "message__content", "created_by__username"]
+    readonly_fields = ["created_at"]
 
     def message_preview(self, obj):
         return obj.message.content[:50] + "..." if len(obj.message.content) > 50 else obj.message.content
