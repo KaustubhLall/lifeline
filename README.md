@@ -129,6 +129,7 @@ graph TB
 
 ```mermaid
 classDiagram
+    %% ─────── Domain Objects ───────
     class User {
         +int id
         +string username
@@ -136,7 +137,7 @@ classDiagram
         +datetime date_joined
         +bool is_active
     }
-    
+
     class Conversation {
         +int id
         +string title
@@ -146,7 +147,7 @@ classDiagram
         +json context
         +get_message_count()
     }
-    
+
     class Message {
         +int id
         +string content
@@ -157,7 +158,7 @@ classDiagram
         +string full_prompt
         +string raw_user_input
     }
-    
+
     class Memory {
         +int id
         +string content
@@ -171,7 +172,7 @@ classDiagram
         +bool is_auto_extracted
         +update_access()
     }
-    
+
     class PromptDebug {
         +int id
         +string full_prompt
@@ -185,23 +186,20 @@ classDiagram
         +int response_time_ms
         +datetime created_at
     }
-    
+
     class MessageNote {
         +int id
         +string note
         +datetime created_at
     }
-    
-    User ||--o{ Conversation
-    User ||--o{ Message
-    User ||--o{ Memory
-    User ||--o{ MessageNote
-    Conversation ||--o{ Message
-    Conversation ||--o{ Memory
-    Conversation ||--o{ PromptDebug
-    Message ||--o{ MessageNote
-    Message ||--o{ Memory
-    Message ||--|| PromptDebug
+
+    %% ─────── Relationships ───────
+    User "1"      o-- "many" Conversation : creates
+    User "1"      o-- "many" Message      : writes
+    User "1"      o-- "many" Memory       : owns
+    User "1"      o-- "many" MessageNote  : annotates
+
+    Conversation "1" o-- "many" Message      : contains
 ```
 
 ## 🚀 Getting Started
