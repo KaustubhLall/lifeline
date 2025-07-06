@@ -17,7 +17,23 @@ sudo yum install -y python3-pip certbot bind-utils rsync
 
 # ─── 3. SYNC APP FILES ──────────────────────────────────────────────────
 sudo mkdir -p /home/ec2-user/lifeline/{backend,frontend}
-sudo rsync -a --delete /tmp/backend/        /home/ec2-user/lifeline/backend/
+
+# Backup existing database if it exists
+if [ -f "/home/ec2-user/lifeline/backend/LifeLine/db.sqlite3" ]; then
+    echo "Backing up existing database..."
+    sudo cp /home/ec2-user/lifeline/backend/LifeLine/db.sqlite3 /home/ec2-user/lifeline/db.sqlite3.backup
+fi
+
+# Sync backend files but exclude the database
+sudo rsync -a --delete --exclude='LifeLine/db.sqlite3' /tmp/backend/ /home/ec2-user/lifeline/backend/
+
+# Restore database backup if no database exists after sync
+if [ ! -f "/home/ec2-user/lifeline/backend/LifeLine/db.sqlite3" ] && [ -f "/home/ec2-user/lifeline/db.sqlite3.backup" ]; then
+    echo "Restoring database from backup..."
+    sudo cp /home/ec2-user/lifeline/db.sqlite3.backup /home/ec2-user/lifeline/backend/LifeLine/db.sqlite3
+fi
+
+# Sync frontend files (no database concerns here)
 sudo rsync -a --delete /tmp/frontend_build/ /home/ec2-user/lifeline/frontend/
 sudo chmod -R 755 /home/ec2-user/lifeline/frontend
 
