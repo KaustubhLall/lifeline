@@ -149,8 +149,8 @@ STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# CORS Settings
-CORS_ORIGIN_ALLOW_ALL = True  # Allow all origins for development
+# CORS Settings - Production ready
+CORS_ORIGIN_ALLOW_ALL = DEBUG  # Only allow all in development
 CORS_ORIGIN_WHITELIST = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -160,6 +160,9 @@ CORS_ORIGIN_WHITELIST = [
     "https://127.0.0.1:3000",
     "https://192.168.86.47:3000",
     "https://10.5.0.2:3000",
+    # Production domains
+    "https://lifeline-kaus.duckdns.org",
+    "https://www.lifeline-kaus.duckdns.org",
 ]
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
@@ -170,6 +173,9 @@ CORS_ALLOWED_ORIGINS = [
     "https://10.5.0.2:3000",
     "http://192.168.86.47:3000",
     "https://192.168.86.47:3000",
+    # Production domains
+    "https://lifeline-kaus.duckdns.org",
+    "https://www.lifeline-kaus.duckdns.org",
 ]
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = [
@@ -212,18 +218,22 @@ CSRF_TRUSTED_ORIGINS = [
     "https://www.lifeline-kaus.duckdns.org",
 ]
 
-# Session settings for admin
-SESSION_COOKIE_SECURE = True
-SESSION_COOKIE_HTTPONLY = True
-CSRF_COOKIE_SECURE = True
+# Disable CSRF for API endpoints in production (since we use token auth)
+CSRF_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_HTTPONLY = True
+
+# For API-only endpoints, we can be more permissive with CSRF
+if not DEBUG:
+    # In production, disable CSRF for API since we use token authentication
+    CSRF_USE_SESSIONS = False
+    CSRF_COOKIE_NAME = "csrftoken"
 
 # Trust proxy headers
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Session and CSRF settings for cross-origin requests
-SESSION_COOKIE_SECURE = False  # Set to True in production
-CSRF_COOKIE_SECURE = False  # Set to True in production
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
 
