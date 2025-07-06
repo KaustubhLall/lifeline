@@ -198,46 +198,28 @@ CORS_ALLOW_HEADERS = [
     "x-requested-with",
 ]
 
-# Additional security settings for mixed content
-SECURE_CROSS_ORIGIN_OPENER_POLICY = None
-SECURE_REFERRER_POLICY = None
-
-# Allow mixed content for development (HTTPS frontend calling HTTP backend)
-if DEBUG:
-    CORS_ALLOW_ALL_ORIGINS = True
-    CORS_ALLOW_CREDENTIALS = True
-
-# Security settings for HTTPS
-SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-SECURE_SSL_REDIRECT = False  # Nginx handles HTTPS redirect
-USE_TZ = True
-
-# CSRF settings for reverse proxy
+# CSRF settings for production - SECURE APPROACH
 CSRF_TRUSTED_ORIGINS = [
     "https://lifeline-kaus.duckdns.org",
     "https://www.lifeline-kaus.duckdns.org",
 ]
 
-# Disable CSRF for API endpoints in production (since we use token auth)
+# Secure CSRF settings
 CSRF_COOKIE_SECURE = not DEBUG
-CSRF_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = False  # Allow JavaScript access for API calls
+CSRF_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_NAME = "csrftoken"
+
+# Session security
 SESSION_COOKIE_SECURE = not DEBUG
 SESSION_COOKIE_HTTPONLY = True
-
-# For API-only endpoints, we can be more permissive with CSRF
-if not DEBUG:
-    # In production, disable CSRF for API since we use token authentication
-    CSRF_USE_SESSIONS = False
-    CSRF_COOKIE_NAME = "csrftoken"
-
-# Trust proxy headers
-SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-
-# Session and CSRF settings for cross-origin requests
 SESSION_COOKIE_SAMESITE = "Lax"
-CSRF_COOKIE_SAMESITE = "Lax"
 
-# Rest Framework settings
+# Trust proxy headers for HTTPS detection
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_SSL_REDIRECT = False  # Nginx handles HTTPS redirect
+
+# Rest Framework settings - SECURE TOKEN AUTH
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.TokenAuthentication",

@@ -27,6 +27,7 @@ __all__ = ["RegisterView", "LoginView"]
 
 
 class RegisterView(APIView):
+    permission_classes = [AllowAny]
 
     def post(self, request):
         _log_request_info(request, "Registration")
