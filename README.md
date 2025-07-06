@@ -1,76 +1,205 @@
-# LifeLine - AI Assistant with Memory
+# LifeLine — AI Assistant with Persistent Memory and RAG
 
-LifeLine is an advanced AI conversational assistant that remembers important details about users across conversations.
-It features intelligent memory extraction, retrieval-augmented generation (RAG), multiple chat modes, and speech-to-text
-capabilities.
+LifeLine is an AI-powered conversational assistant that remembers important user details across sessions, offers
+multiple chat modes, and supports speech-to-text. It combines a React frontend with a Django REST backend and deep
+OpenAI integration for retrieval-augmented generation (RAG).
 
-## 🌟 Features
+## 🌟 Key Features
 
-### Core AI Capabilities
+• **Multiple AI Models**: GPT-4.1 Nano, GPT-4o, GPT-4o Mini, GPT-4.1 for balanced performance and cost.  
+• **Persistent Memory**: LLM-driven extraction and storage of personal info, preferences, goals, insights, and
+context.  
+• **Retrieval-Augmented Generation**: Semantic embeddings and cosine similarity to fetch relevant memories
+dynamically.  
+• **Flexible Chat Modes**: Conversational, Coaching, Therapeutic, Productivity, and Creative modes with mode-specific
+system prompts.  
+• **Speech-to-Text**: Real-time audio recording and transcription using OpenAI Whisper models.  
+• **Robust Debugging**: Full prompt logging, token and memory metrics, and a dedicated `PromptDebug` model.  
+• **Secure Authentication**: Token-based auth with optional CSRF exemption middleware for API endpoints.
 
-- **Multiple AI Models**: Support for GPT-4.1, GPT-4o, GPT-4o Mini, and GPT-4.1 Nano
-- **Intelligent Memory System**: Automatic extraction and storage of user information from conversations
-- **RAG (Retrieval-Augmented Generation)**: Semantic search and retrieval of relevant memories
-- **Multiple Chat Modes**: Conversational, Coaching, Therapeutic, Productivity, and Creative modes
-- **Speech-to-Text**: Real-time audio transcription with OpenAI Whisper
+## 🏗️ High-Level Architecture Overview
 
 ### Memory & Context Management
 
 - **Automatic Memory Extraction**: LLM-powered extraction of personal information, preferences, goals, and insights
-- **Real-time Access Tracking**: Tracks when memories are accessed during conversations with timestamps and counts
-- **Enhanced Memory Tags**: Multiple status tags including Auto-extracted, User edited, and Last accessed with
-  timestamps
-- **Memory Edit Tracking**: Automatically records when users manually edit their memories
 - **Semantic Memory Search**: Vector embeddings for intelligent memory retrieval
 - **Memory Types**: Personal, Preferences, Goals, Insights, Facts, and Context
-- **Conversation Continuity**: Maintains context across multiple conversations with detailed memory lifecycle tracking
+- **Conversation Continuity**: Maintains context across multiple conversations
 - **Enhanced Prompting**: Dynamic prompt construction with memory context and conversation history
 
-### User Interface
+1. **Frontend (React)**
+    - Single-page application built with Create React App.
+    - Key UI components: `Header`, `ChatSidebar`, `ChatWindow`, `ChatInput`, `Login`, `SignUp`.
+    - Custom hooks: `useAuth`, `useConversations`, `useSpeechToText`, `useMobileLayout`.
+    - Utilities: `apiUtils.fetchWithAuth` for API calls; `speechUtils.isSTTSupported` for microphone permissions.
 
-- **Responsive Design**: Mobile-first responsive interface
-- **Real-time Chat**: Smooth conversation experience with typing indicators
-- **Conversation Management**: Create, organize, and manage multiple conversations
-- **Voice Input**: Speech-to-text integration with microphone support
-- **User Authentication**: Secure login and registration system
+2. **Backend (Django REST Framework)**
+    - REST API endpoints under `/api/` for login, registration, conversations, messages, memories, notes, and
+      transcription.
+    - Models: `User`, `Conversation`, `Message`, `Memory`, `PromptDebug`, `MessageNote`.
+    - Serializers to validate and format JSON payloads.
+    - Views orchestrate RAG: retrieve memories, build enhanced prompts, call OpenAI APIs, store debug info.
+    - Utility modules:
+        - **`llm.py`**: OpenAI client, text generation, transcription, TTS, embeddings.
+        - **`memory_utils.py`**: Cosine similarity, memory extraction/storage, retrieval, ranking.
+        - **`prompts.py`**: Mode-specific system prompts, memory/context formatting, conversation history.
+    - Middleware for selective CSRF exemption on token-based API routes.
 
-## 🏗️ Architecture
+### Component Diagram
 
-### Backend (Django REST Framework)
-
+```mermaid
+flowchart TD
+    subgraph Frontend ["React SPA"]
+        A[App Component]
+        B[UI Components]
+        C[Custom Hooks]
+        D[Utilities]
+    end
+    
+    subgraph Backend ["Django REST API"]
+        E[Views & Endpoints]
+        F[Serializers]
+        G[Models]
+        H[LLM Utils]
+        I[Memory Utils]
+        J[Prompt Utils]
+    end
+    
+    subgraph External ["External Services"]
+        K[OpenAI API]
+        L[Database]
+    end
+    
+    Frontend -->|HTTP/JSON| Backend
+    Backend -->|API Calls| K
+    Backend -->|ORM| L
 ```
-backend/LifeLine/
-├── api/
-│   ├── models/
-│   │   ├── user_auth.py      # User authentication model
-│   │   └── chat.py           # Conversation, Message, Memory models
-│   ├── views/
-│   │   ├── login.py          # Authentication endpoints
-│   │   └── views.py          # Main API endpoints
-│   ├── utils/
-│   │   ├── llm.py           # OpenAI API integration
-│   │   ├── memory_utils.py   # Memory extraction and RAG
-│   │   └── prompts.py        # Dynamic prompt generation
-│   └── serializers.py        # API serializers
+
+### System Architecture
+
+```mermaid
+graph TB
+    subgraph Client ["Client Layer"]
+        UI[React Frontend]
+        STT[Speech-to-Text]
+        Auth[Authentication]
+    end
+    
+    subgraph API ["API Layer"]
+        REST[Django REST Framework]
+        Views[API Views]
+        Middleware[CSRF/Auth Middleware]
+    end
+    
+    subgraph Business ["Business Logic"]
+        Memory[Memory Management]
+        RAG[RAG Engine] 
+        Prompts[Prompt Engineering]
+        LLM[LLM Integration]
+    end
+    
+    subgraph Data ["Data Layer"]
+        Models[Django Models]
+        DB[(SQLite Database)]
+        Embeddings[Vector Embeddings]
+    end
+    
+    subgraph External ["External Services"]
+        OpenAI[OpenAI API]
+        Whisper[Whisper STT]
+    end
+    
+    UI --> REST
+    STT --> REST
+    Auth --> REST
+    REST --> Views
+    Views --> Middleware
+    Views --> Memory
+    Views --> RAG
+    Memory --> Models
+    RAG --> LLM
+    RAG --> Prompts
+    LLM --> OpenAI
+    STT --> Whisper
+    Models --> DB
+    Memory --> Embeddings
 ```
 
-### Frontend (React)
+### UML Class Diagram
 
-```
-frontend/src/
-├── components/
-│   ├── ChatInput.js          # Message input with STT
-│   ├── ChatWindow.js         # Message display
-│   ├── ChatSidebar.js        # Conversation list
-│   ├── Header.js             # App header with controls
-│   └── Auth components       # Login/Signup
-├── hooks/
-│   ├── useAuth.js            # Authentication state
-│   ├── useConversations.js   # Chat management
-│   ├── useSpeechToText.js    # STT functionality
-│   └── useMobileLayout.js    # Responsive layout
-└── pages/
-    └── App.js                # Main application
+```mermaid
+classDiagram
+    %% ─────── Domain Objects ───────
+    class User {
+        +int id
+        +string username
+        +string email
+        +datetime date_joined
+        +bool is_active
+    }
+
+    class Conversation {
+        +int id
+        +string title
+        +datetime created_at
+        +datetime updated_at
+        +bool is_archived
+        +json context
+        +get_message_count()
+    }
+
+    class Message {
+        +int id
+        +string content
+        +datetime created_at
+        +bool is_bot
+        +string role
+        +json metadata
+        +string full_prompt
+        +string raw_user_input
+    }
+
+    class Memory {
+        +int id
+        +string content
+        +string title
+        +string memory_type
+        +float importance_score
+        +json embedding
+        +json tags
+        +datetime created_at
+        +int access_count
+        +bool is_auto_extracted
+        +update_access()
+    }
+
+    class PromptDebug {
+        +int id
+        +string full_prompt
+        +string system_prompt
+        +string memory_context
+        +string model_used
+        +string mode_used
+        +int prompt_tokens
+        +int response_tokens
+        +int memories_used_count
+        +int response_time_ms
+        +datetime created_at
+    }
+
+    class MessageNote {
+        +int id
+        +string note
+        +datetime created_at
+    }
+
+    %% ─────── Relationships ───────
+    User "1"      o-- "many" Conversation : creates
+    User "1"      o-- "many" Message      : writes
+    User "1"      o-- "many" Memory       : owns
+    User "1"      o-- "many" MessageNote  : annotates
+
+    Conversation "1" o-- "many" Message      : contains
 ```
 
 ## 🚀 Getting Started
