@@ -192,16 +192,16 @@ classDiagram
         +datetime created_at
     }
     
-    User ||--o{ Conversation : owns
-    User ||--o{ Message : sends
-    User ||--o{ Memory : has
-    User ||--o{ MessageNote : creates
-    Conversation ||--o{ Message : contains
-    Conversation ||--o{ Memory : generates
-    Conversation ||--o{ PromptDebug : logs
-    Message ||--o{ MessageNote : annotated_with
-    Message ||--o{ Memory : extracts
-    Message ||--|| PromptDebug : debugged_by
+    User ||--o{ Conversation
+    User ||--o{ Message
+    User ||--o{ Memory
+    User ||--o{ MessageNote
+    Conversation ||--o{ Message
+    Conversation ||--o{ Memory
+    Conversation ||--o{ PromptDebug
+    Message ||--o{ MessageNote
+    Message ||--o{ Memory
+    Message ||--|| PromptDebug
 ```
 
 ## 🚀 Getting Started
