@@ -14,13 +14,24 @@ function Login({onLogin, onSwitchToSignup}) {
         setIsLoading(true);
 
         try {
-            const loginUrl = `${config.API_URL}/login/`;
+            // First, get the CSRF token from Django
+            const csrfResponse = await fetch(`${config.API_URL}/csrf/`, {
+                method: 'GET',
+                credentials: 'include',
+            });
 
+            const csrfData = await csrfResponse.json();
+            const csrfToken = csrfData.csrfToken;
+
+            // Now make the login request with the CSRF token
+            const loginUrl = `${config.API_URL}/login/`;
             const response = await fetch(loginUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken,
                 },
+                credentials: 'include',
                 body: JSON.stringify({username, password}),
             });
 

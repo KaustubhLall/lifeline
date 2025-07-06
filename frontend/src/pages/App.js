@@ -8,6 +8,7 @@ import ErrorToast from '../components/ErrorToast';
 import ChatSidebar from '../components/ChatSidebar';
 import ChatWindow from '../components/ChatWindow';
 import ChatInput from '../components/ChatInput';
+import UserSettings from '../components/UserSettings';
 import {useAuth} from '../hooks/useAuth';
 import {useConversations} from '../hooks/useConversations';
 import {useSpeechToText} from '../hooks/useSpeechToText';
@@ -15,6 +16,7 @@ import {useMobileLayout} from '../hooks/useMobileLayout';
 
 function App() {
     const [showSignup, setShowSignup] = useState(false);
+    const [showSettings, setShowSettings] = useState(false);
     const [input, setInput] = useState('');
     const [selectedModel, setSelectedModel] = useState('gpt-4.1-nano');
     const [chatMode, setChatMode] = useState('conversational');
@@ -79,6 +81,16 @@ function App() {
         handleLogout();
         resetConversations();
         resetLayout();
+        setShowSettings(false);
+    };
+
+    // Open/close settings modal
+    const handleOpenSettings = () => {
+        setShowSettings(true);
+    };
+
+    const handleCloseSettings = () => {
+        setShowSettings(false);
     };
 
     // Append speech transcription to input
@@ -128,6 +140,15 @@ function App() {
             {/* Display error messages */}
             {error && <ErrorToast message={error} onClose={clearError}/>}
 
+            {/* User Settings Modal */}
+            {showSettings && (
+                <UserSettings
+                    onClose={handleCloseSettings}
+                    username={username}
+                    userId={userId}
+                />
+            )}
+
             {/* Application header with controls */}
             <Header
                 onToggleSidebar={toggleSidebar}
@@ -138,6 +159,7 @@ function App() {
                 showMobileMenu={showMobileMenu}
                 setShowMobileMenu={toggleMobileMenu}
                 onLogout={handleLogoutWithCleanup}
+                onOpenSettings={handleOpenSettings}
                 models={models}
                 chatModes={chatModes}
             />
@@ -156,6 +178,7 @@ function App() {
                         currentId={currentId}
                         onSelect={handleConversationSelect}
                         onNewChat={handleNewChatWithCleanup}
+                        onClose={closeSidebar}
                     />
                 </div>
 

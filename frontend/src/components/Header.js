@@ -12,7 +12,8 @@ function Header({
                     setShowMobileMenu,
                     onLogout,
                     models,
-                    chatModes
+                    chatModes,
+                    onOpenSettings
                 }) {
     return (
         <div className="app-header">
@@ -110,6 +111,18 @@ function Header({
                                 </select>
                             </div>
                             <div className="mobile-actions">
+                                {/* User Settings action */}
+                                <button
+                                    className="mobile-action-btn settings-btn"
+                                    onClick={() => {
+                                        setShowMobileMenu(false);
+                                        onOpenSettings();
+                                    }}
+                                    aria-label="User Settings"
+                                >
+                                    <i className="bi bi-person-gear"></i>
+                                    <span>Settings</span>
+                                </button>
                                 {/* Close settings menu */}
                                 <button
                                     className="mobile-action-btn close-btn"
@@ -117,7 +130,6 @@ function Header({
                                     aria-label="Close menu"
                                 >
                                     <i className="bi bi-x"></i>
-                                    <span>Close</span>
                                 </button>
                                 {/* Logout action */}
                                 <button
@@ -135,6 +147,16 @@ function Header({
                         </div>
                     </div>
                 </div>
+
+                {/* Desktop user settings button */}
+                <button
+                    className="desktop-settings-btn"
+                    onClick={onOpenSettings}
+                    aria-label="User Settings"
+                >
+                    <i className="bi bi-person-gear"></i>
+                    <span className="settings-text">Settings</span>
+                </button>
 
                 {/* Desktop logout button */}
                 <button

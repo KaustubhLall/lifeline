@@ -27,6 +27,8 @@ class MemorySerializer(serializers.ModelSerializer):
             "metadata",
             "created_at",
             "updated_at",
+            "edited_at",
+            "last_accessed_at",
             "importance_score",
             "last_accessed",
             "access_count",
@@ -35,7 +37,7 @@ class MemorySerializer(serializers.ModelSerializer):
             "source_message",
             "source_conversation",
         ]
-        read_only_fields = ["id", "created_at", "updated_at", "last_accessed", "access_count"]
+        read_only_fields = ["id", "created_at", "updated_at", "last_accessed", "access_count", "last_accessed_at"]
 
 
 class MemoryCreateSerializer(serializers.ModelSerializer):

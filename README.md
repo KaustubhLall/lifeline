@@ -1,10 +1,13 @@
 # LifeLine - AI Assistant with Memory
 
-LifeLine is an advanced AI conversational assistant that remembers important details about users across conversations. It features intelligent memory extraction, retrieval-augmented generation (RAG), multiple chat modes, and speech-to-text capabilities.
+LifeLine is an advanced AI conversational assistant that remembers important details about users across conversations.
+It features intelligent memory extraction, retrieval-augmented generation (RAG), multiple chat modes, and speech-to-text
+capabilities.
 
 ## 🌟 Features
 
 ### Core AI Capabilities
+
 - **Multiple AI Models**: Support for GPT-4.1, GPT-4o, GPT-4o Mini, and GPT-4.1 Nano
 - **Intelligent Memory System**: Automatic extraction and storage of user information from conversations
 - **RAG (Retrieval-Augmented Generation)**: Semantic search and retrieval of relevant memories
@@ -12,13 +15,19 @@ LifeLine is an advanced AI conversational assistant that remembers important det
 - **Speech-to-Text**: Real-time audio transcription with OpenAI Whisper
 
 ### Memory & Context Management
+
 - **Automatic Memory Extraction**: LLM-powered extraction of personal information, preferences, goals, and insights
+- **Real-time Access Tracking**: Tracks when memories are accessed during conversations with timestamps and counts
+- **Enhanced Memory Tags**: Multiple status tags including Auto-extracted, User edited, and Last accessed with
+  timestamps
+- **Memory Edit Tracking**: Automatically records when users manually edit their memories
 - **Semantic Memory Search**: Vector embeddings for intelligent memory retrieval
 - **Memory Types**: Personal, Preferences, Goals, Insights, Facts, and Context
-- **Conversation Continuity**: Maintains context across multiple conversations
+- **Conversation Continuity**: Maintains context across multiple conversations with detailed memory lifecycle tracking
 - **Enhanced Prompting**: Dynamic prompt construction with memory context and conversation history
 
 ### User Interface
+
 - **Responsive Design**: Mobile-first responsive interface
 - **Real-time Chat**: Smooth conversation experience with typing indicators
 - **Conversation Management**: Create, organize, and manage multiple conversations
@@ -28,6 +37,7 @@ LifeLine is an advanced AI conversational assistant that remembers important det
 ## 🏗️ Architecture
 
 ### Backend (Django REST Framework)
+
 ```
 backend/LifeLine/
 ├── api/
@@ -45,6 +55,7 @@ backend/LifeLine/
 ```
 
 ### Frontend (React)
+
 ```
 frontend/src/
 ├── components/
@@ -65,6 +76,7 @@ frontend/src/
 ## 🚀 Getting Started
 
 ### Prerequisites
+
 - Python 3.8+
 - Node.js 14+
 - OpenAI API key
@@ -120,9 +132,9 @@ frontend/src/
    ```
 
 8. **Access Django Admin**
-   - Admin Interface: http://localhost:8000/admin
-   - Login with your superuser credentials
-   - Manage users, conversations, messages, and memories
+    - Admin Interface: http://localhost:8000/admin
+    - Login with your superuser credentials
+    - Manage users, conversations, messages, and memories
 
 #### Frontend Setup
 
@@ -152,8 +164,8 @@ frontend/src/
    ```
 
 5. **Access the application**
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:8000/api
+    - Frontend: http://localhost:3000
+    - Backend API: http://localhost:8000/api
 
 ## 🌐 Production Deployment
 
@@ -161,27 +173,29 @@ frontend/src/
 
 1. **Set up GitHub Secrets**
    Go to your repository → Settings → Secrets and variables → Actions:
-   - `EC2_SSH_PRIVATE_KEY`: Your EC2 private key
-   - `EC2_HOSTNAME`: Your EC2 public IP address
-   - `EC2_USER_NAME`: `ec2-user` (for Amazon Linux)
-   - `DJANGO_SECRET_KEY`: Generate with `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"`
-   - `OPENAI_API_KEY`: Your OpenAI API key
+    - `EC2_SSH_PRIVATE_KEY`: Your EC2 private key
+    - `EC2_HOSTNAME`: Your EC2 public IP address
+    - `EC2_USER_NAME`: `ec2-user` (for Amazon Linux)
+    - `DJANGO_SECRET_KEY`: Generate with
+      `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"`
+    - `OPENAI_API_KEY`: Your OpenAI API key
 
 2. **EC2 Security Groups**
    Ensure your EC2 instance allows:
-   - HTTP (port 80) from anywhere
-   - HTTPS (port 443) from anywhere
-   - SSH (port 22) from your IP
+    - HTTP (port 80) from anywhere
+    - HTTPS (port 443) from anywhere
+    - SSH (port 22) from your IP
 
 3. **Deploy**
-   - Push to main branch or manually trigger GitHub Action
-   - Access via `https://your-ec2-ip` (will show SSL warning)
+    - Push to main branch or manually trigger GitHub Action
+    - Access via `https://your-ec2-ip` (will show SSL warning)
 
 ### Option 2: Deploy with Trusted SSL (Recommended)
 
 #### Step 1: Get a Free Domain
 
 **Using DuckDNS (Recommended):**
+
 1. Go to https://www.duckdns.org/
 2. Sign in with Google/GitHub
 3. Create a subdomain: `lifeline-yourname.duckdns.org`
@@ -189,6 +203,7 @@ frontend/src/
 5. Copy your DuckDNS token
 
 **Alternative Free DNS Services:**
+
 - **No-IP**: https://www.noip.com/ (30 hostnames free)
 - **FreeDNS**: https://freedns.afraid.org/ (completely free)
 - **Dynu**: https://www.dynu.com/ (4 hostnames free)
@@ -196,10 +211,10 @@ frontend/src/
 #### Step 2: Update GitHub Secrets
 
 1. **Update existing secrets:**
-   - Change `EC2_HOSTNAME` from IP to your domain: `lifeline-yourname.duckdns.org`
+    - Change `EC2_HOSTNAME` from IP to your domain: `lifeline-yourname.duckdns.org`
 
 2. **Optional: Add DuckDNS auto-update (for dynamic IPs):**
-   - `DUCKDNS_TOKEN`: Your DuckDNS token (if using DuckDNS)
+    - `DUCKDNS_TOKEN`: Your DuckDNS token (if using DuckDNS)
 
 #### Step 3: Deploy
 
@@ -210,6 +225,7 @@ frontend/src/
 ### Deployment Features
 
 The deployment script automatically:
+
 - ✅ **Detects IP vs Domain**: Uses appropriate SSL certificate method
 - ✅ **Let's Encrypt SSL**: Automatic trusted certificates for domains
 - ✅ **Self-signed SSL**: Fallback for IP addresses
@@ -235,11 +251,12 @@ After deployment, you'll need to create a superuser on your EC2 instance:
    ```
 
 3. **Access production admin**
-   - Admin Interface: `https://your-domain-or-ip/admin`
-   - Login with your superuser credentials
-   - Manage production users, conversations, and memories
+    - Admin Interface: `https://your-domain-or-ip/admin`
+    - Login with your superuser credentials
+    - Manage production users, conversations, and memories
 
 **What you can do in Django Admin:**
+
 - 👥 **User Management**: View registered users, reset passwords, manage permissions
 - 💬 **Conversations**: Browse all user conversations, delete inappropriate content
 - 📝 **Messages**: View chat messages, monitor API usage
@@ -251,6 +268,7 @@ After deployment, you'll need to create a superuser on your EC2 instance:
 ### Environment Variables
 
 #### Backend (.env or GitHub Secrets)
+
 ```env
 # Required
 OPENAI_API_KEY=sk-your-openai-key
@@ -263,25 +281,27 @@ DATABASE_URL=sqlite:///db.sqlite3  # Default SQLite
 ```
 
 #### Frontend (config.js)
+
 ```javascript
 const config = {
-  API_BASE_URL: process.env.NODE_ENV === 'production' 
-    ? '/api'  // Production: served by nginx
-    : 'http://localhost:8000/api',  // Development
-  
-  // Speech-to-text settings
-  STT_ENABLED: true,
-  STT_LANGUAGE: 'en-US',
-  
-  // Chat settings
-  DEFAULT_MODEL: 'gpt-4o-mini',
-  MAX_MESSAGE_LENGTH: 4000
+    API_BASE_URL: process.env.NODE_ENV === 'production'
+        ? '/api'  // Production: served by nginx
+        : 'http://localhost:8000/api',  // Development
+
+    // Speech-to-text settings
+    STT_ENABLED: true,
+    STT_LANGUAGE: 'en-US',
+
+    // Chat settings
+    DEFAULT_MODEL: 'gpt-4o-mini',
+    MAX_MESSAGE_LENGTH: 4000
 };
 ```
 
 ### AI Model Configuration
 
 Available models in `backend/LifeLine/api/utils/llm.py`:
+
 - `gpt-4o`: Most capable, higher cost
 - `gpt-4o-mini`: Balanced performance and cost (default)
 - `gpt-4-turbo`: Previous generation, still powerful
@@ -290,6 +310,7 @@ Available models in `backend/LifeLine/api/utils/llm.py`:
 ### Memory System Configuration
 
 Memory extraction settings in `backend/LifeLine/api/utils/memory_utils.py`:
+
 - **Memory Types**: Personal, Preferences, Goals, Insights, Facts, Context
 - **Extraction Threshold**: Minimum conversation length for memory extraction
 - **Similarity Threshold**: Vector similarity cutoff for memory retrieval
@@ -300,21 +321,25 @@ Memory extraction settings in `backend/LifeLine/api/utils/memory_utils.py`:
 ### Common Issues
 
 **SSL Certificate Issues:**
+
 - Ensure your domain points to your EC2 IP
 - Check port 80 is accessible for Let's Encrypt verification
 - Wait 2-3 minutes after DNS changes before deploying
 
 **Voice Input Not Working:**
+
 - HTTPS is required for microphone access
 - Check browser microphone permissions
 - Ensure you're not using localhost in production
 
 **Backend API Errors:**
+
 - Check Django logs: `sudo journalctl -u lifeline-backend -f`
 - Verify environment variables are set correctly
 - Ensure OpenAI API key is valid and has credits
 
 **Frontend Not Loading:**
+
 - Check nginx logs: `sudo tail -f /var/log/nginx/error.log`
 - Verify file permissions: `ls -la /home/ec2-user/lifeline/frontend/`
 - Confirm nginx is serving files from correct directory
@@ -322,12 +347,14 @@ Memory extraction settings in `backend/LifeLine/api/utils/memory_utils.py`:
 ### Debugging Commands
 
 **Check service status:**
+
 ```bash
 sudo systemctl status lifeline-backend
 sudo systemctl status nginx
 ```
 
 **View logs:**
+
 ```bash
 # Backend logs
 sudo journalctl -u lifeline-backend -f
@@ -338,12 +365,14 @@ sudo tail -f /var/log/nginx/error.log
 ```
 
 **Test SSL certificate:**
+
 ```bash
 sudo certbot certificates
 openssl s_client -connect yourdomain.com:443
 ```
 
 **Manual restart services:**
+
 ```bash
 sudo systemctl restart lifeline-backend
 sudo systemctl restart nginx
@@ -370,6 +399,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🔄 Updates
 
 The application automatically updates when you push to the main branch. The GitHub Action will:
+
 1. Build the frontend
 2. Deploy to your EC2 instance
 3. Restart services

@@ -31,7 +31,7 @@ DEBUG = os.getenv("DEBUG", "True").lower() == "true"
 
 # Host configuration for development and production
 ALLOWED_HOSTS = [
-    "localhost",
+    "*localhost*",
     "127.0.0.1",
     "192.168.86.47",
     "10.5.0.2",
@@ -210,6 +210,8 @@ USE_TZ = True
 CSRF_TRUSTED_ORIGINS = [
     "https://lifeline-kaus.duckdns.org",
     "https://www.lifeline-kaus.duckdns.org",
+    "https://localhost:3000",  # For development
+    "http://localhost:3000",  # For development fallback
 ]
 
 # Session settings for admin
