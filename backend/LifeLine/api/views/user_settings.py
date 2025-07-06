@@ -101,10 +101,10 @@ class ChangePasswordView(APIView):
                 )
 
             # Verify current password
-            if not check_password(current_password, user.password):
+            if not authenticate(username=user.username, password=current_password):
                 return Response({"error": "Current password is incorrect"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Validate new password length
+            # Validate new password
             if len(new_password) < 8:
                 return Response(
                     {"error": "New password must be at least 8 characters long"}, status=status.HTTP_400_BAD_REQUEST
@@ -115,7 +115,6 @@ class ChangePasswordView(APIView):
             user.save()
 
             logger.info(f"Password changed for user {user.username}")
-
             return Response({"message": "Password changed successfully"}, status=status.HTTP_200_OK)
 
         except Exception as e:
@@ -123,8 +122,8 @@ class ChangePasswordView(APIView):
             return Response({"error": "Failed to change password"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class UserMemoriesView(APIView):
-    """View for managing user memories and notes"""
+class MemoryListView(APIView):
+    """View for listing user memories with pagination"""
 
     permission_classes = [IsAuthenticated]
 
@@ -133,88 +132,77 @@ class UserMemoriesView(APIView):
         try:
             user = request.user
             page = int(request.GET.get("page", 1))
-            page_size = min(int(request.GET.get("page_size", 10)), 50)  # Max 50 per page
+            page_size = int(request.GET.get("page_size", 10))
 
             # Get all memories for the user, ordered by creation date (newest first)
             memories_queryset = Memory.objects.filter(user=user).order_by("-created_at")
 
-            # Paginate results
+            # Paginate
             paginator = Paginator(memories_queryset, page_size)
-
-            if page > paginator.num_pages:
-                return Response({"error": f"Page {page} does not exist"}, status=status.HTTP_404_NOT_FOUND)
-
-            page_obj = paginator.get_page(page)
-            memories = page_obj.object_list
+            memories_page = paginator.get_page(page)
 
             # Serialize memories
-            serializer = MemorySerializer(memories, many=True)
+            serializer = MemorySerializer(memories_page.object_list, many=True)
 
-            response_data = {
-                "memories": serializer.data,
-                "pagination": {
-                    "current_page": page,
-                    "total_pages": paginator.num_pages,
-                    "total_memories": paginator.count,
-                    "has_next": page_obj.has_next(),
-                    "has_previous": page_obj.has_previous(),
+            return Response(
+                {
+                    "memories": serializer.data,
+                    "pagination": {
+                        "current_page": page,
+                        "total_pages": paginator.num_pages,
+                        "total_memories": paginator.count,
+                        "has_next": memories_page.has_next(),
+                        "has_previous": memories_page.has_previous(),
+                    },
                 },
-            }
+                status=status.HTTP_200_OK,
+            )
 
-            return Response(response_data, status=status.HTTP_200_OK)
-
-        except ValueError as e:
-            return Response({"error": "Invalid page or page_size parameter"}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            logger.error(f"Error fetching user memories: {str(e)}")
+            logger.error(f"Error fetching memories: {str(e)}")
             return Response({"error": "Failed to fetch memories"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class MemoryDeleteView(APIView):
-    """View for deleting and editing individual memories"""
+class MemoryDetailView(APIView):
+    """View for managing individual memories"""
 
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, memory_id):
-        """Edit a specific memory"""
+        """Update a memory and set edited_at timestamp"""
         try:
-            user = request.user
-            memory = Memory.objects.filter(id=memory_id, user=user).first()
-
-            if not memory:
-                return Response({"error": "Memory not found"}, status=status.HTTP_404_NOT_FOUND)
-
+            memory = Memory.objects.get(id=memory_id, user=request.user)
             data = request.data
-            content = data.get("content")
 
-            if not content:
-                return Response({"error": "Content is required"}, status=status.HTTP_400_BAD_REQUEST)
+            # Update memory content
+            if "content" in data:
+                memory.content = data["content"]
 
-            memory.content = content
+            # Set edited_at timestamp when user edits
+            from django.utils import timezone
+
+            memory.edited_at = timezone.now()
             memory.save()
 
-            logger.info(f"Memory {memory_id} updated by user {user.username}")
+            serializer = MemorySerializer(memory)
+            return Response(serializer.data, status=status.HTTP_200_OK)
 
-            return Response({"message": "Memory updated successfully"}, status=status.HTTP_200_OK)
-
+        except Memory.DoesNotExist:
+            return Response({"error": "Memory not found"}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             logger.error(f"Error updating memory: {str(e)}")
             return Response({"error": "Failed to update memory"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def delete(self, request, memory_id):
-        """Delete a specific memory"""
+        """Delete a memory"""
         try:
-            user = request.user
-            memory = Memory.objects.filter(id=memory_id, user=user).first()
-
-            if not memory:
-                return Response({"error": "Memory not found"}, status=status.HTTP_404_NOT_FOUND)
-
+            memory = Memory.objects.get(id=memory_id, user=request.user)
             memory.delete()
-            logger.info(f"Memory {memory_id} deleted by user {user.username}")
 
-            return Response({"message": "Memory deleted successfully"}, status=status.HTTP_200_OK)
+            return Response({"message": "Memory deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
 
+        except Memory.DoesNotExist:
+            return Response({"error": "Memory not found"}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             logger.error(f"Error deleting memory: {str(e)}")
             return Response({"error": "Failed to delete memory"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

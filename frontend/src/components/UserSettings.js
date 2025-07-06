@@ -201,6 +201,7 @@ function UserSettings({onClose, username, userId}) {
     };
 
     const formatDate = (dateString) => {
+        if (!dateString) return '';
         return new Date(dateString).toLocaleDateString('en-US', {
             year: 'numeric',
             month: 'short',
@@ -208,6 +209,52 @@ function UserSettings({onClose, username, userId}) {
             hour: '2-digit',
             minute: '2-digit'
         });
+    };
+
+    const formatRelativeTime = (dateString) => {
+        if (!dateString) return '';
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffInHours = Math.floor((now - date) / (1000 * 60 * 60));
+
+        if (diffInHours < 1) return 'Just now';
+        if (diffInHours < 24) return `${diffInHours}h ago`;
+        const diffInDays = Math.floor(diffInHours / 24);
+        if (diffInDays < 7) return `${diffInDays}d ago`;
+        const diffInWeeks = Math.floor(diffInDays / 7);
+        if (diffInWeeks < 4) return `${diffInWeeks}w ago`;
+        const diffInMonths = Math.floor(diffInDays / 30);
+        return `${diffInMonths}mo ago`;
+    };
+
+    const getMemoryTags = (memory) => {
+        const tags = [];
+
+        if (memory.is_auto_extracted) {
+            tags.push({
+                type: 'auto-extracted',
+                label: 'Auto-extracted',
+                timestamp: memory.created_at
+            });
+        }
+
+        if (memory.edited_at) {
+            tags.push({
+                type: 'user-edited',
+                label: 'User edited',
+                timestamp: memory.edited_at
+            });
+        }
+
+        if (memory.last_accessed_at) {
+            tags.push({
+                type: 'last-accessed',
+                label: 'Last accessed',
+                timestamp: memory.last_accessed_at
+            });
+        }
+
+        return tags;
     };
 
     return (
@@ -398,7 +445,7 @@ function UserSettings({onClose, username, userId}) {
                                             <div key={memory.id} className="memory-card">
                                                 <div className="memory-header">
                                                     <span className="memory-date">
-                                                        {formatDate(memory.created_at)}
+                                                        Created: {formatDate(memory.created_at)}
                                                     </span>
                                                     <div className="memory-actions">
                                                         {editingMemory !== memory.id && (
@@ -449,12 +496,25 @@ function UserSettings({onClose, username, userId}) {
                                                     </div>
                                                 )}
 
+                                                <div className="memory-tags">
+                                                    {getMemoryTags(memory).map((tag, index) => (
+                                                        <span key={index} className={`memory-tag ${tag.type}`}>
+                                                            {tag.label}
+                                                            {tag.timestamp && (
+                                                                <span className="tag-timestamp">
+                                                                    ({formatRelativeTime(tag.timestamp)})
+                                                                </span>
+                                                            )}
+                                                        </span>
+                                                    ))}
+                                                </div>
+
                                                 <div className="memory-meta">
                                                     <span className="memory-type">
-                                                        {memory.is_auto_extracted ? 'Auto-extracted' : 'Manual'}
+                                                        {memory.memory_type || 'personal'}
                                                     </span>
                                                     <span className="memory-access">
-                                                        Accessed {memory.access_count} times
+                                                        Accessed {memory.access_count || 0} times
                                                     </span>
                                                 </div>
                                             </div>

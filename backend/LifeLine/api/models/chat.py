@@ -144,6 +144,12 @@ class Memory(models.Model):
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    edited_at = models.DateTimeField(
+        null=True, blank=True, help_text="Timestamp when the memory was last edited by the user."
+    )
+    last_accessed_at = models.DateTimeField(
+        null=True, blank=True, help_text="Timestamp when the memory was last accessed."
+    )
 
     # Relevance and importance scoring
     importance_score = models.FloatField(default=0.5, help_text="Importance score (0.0 to 1.0)")
@@ -163,6 +169,8 @@ class Memory(models.Model):
             models.Index(fields=["user", "is_auto_extracted"]),
             models.Index(fields=["user", "access_count"]),
             models.Index(fields=["user", "last_accessed"]),
+            models.Index(fields=["user", "-created_at"]),
+            models.Index(fields=["user", "-last_accessed_at"]),
         ]
 
     def __str__(self):

@@ -1,17 +1,15 @@
 from django.http import JsonResponse
+from django.middleware.csrf import get_token
 from django.urls import path
 from django.utils import timezone
-from django.middleware.csrf import get_token
 from django.views.decorators.http import require_http_methods
 
 from .views.login import LoginView, RegisterView
-from .views.user_settings import UserProfileView, ChangePasswordView, UserMemoriesView, MemoryDeleteView
+from .views.user_settings import UserProfileView, ChangePasswordView, MemoryListView, MemoryDetailView
 from .views.views import (
     ConversationListCreateView,
     ConversationDetailView,
     MessageListCreateView,
-    MemoryListCreateView,
-    MemoryDetailView,
     NoteView,
     TranscriptionView,
 )
@@ -44,8 +42,8 @@ urlpatterns = [
     # User settings endpoints
     path("user/profile/", UserProfileView.as_view(), name="user-profile"),
     path("user/change-password/", ChangePasswordView.as_view(), name="change-password"),
-    path("memories/", UserMemoriesView.as_view(), name="user-memories"),
-    path("memories/<int:memory_id>/", MemoryDeleteView.as_view(), name="delete-memory"),
+    path("memories/", MemoryListView.as_view(), name="user-memories"),
+    path("memories/<int:memory_id>/", MemoryDetailView.as_view(), name="memory-detail"),
     # Existing endpoints
     path("conversations/", ConversationListCreateView.as_view(), name="conversation-list"),
     path("conversations/<int:conversation_id>/", ConversationDetailView.as_view(), name="conversation-detail"),

@@ -130,7 +130,6 @@ function Header({
                                     aria-label="Close menu"
                                 >
                                     <i className="bi bi-x"></i>
-                                    <span>Close</span>
                                 </button>
                                 {/* Logout action */}
                                 <button
