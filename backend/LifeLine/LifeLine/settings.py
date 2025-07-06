@@ -74,6 +74,7 @@ MIDDLEWARE = [
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
+    "api.middleware.APICSRFExemptMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -149,8 +150,8 @@ STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# CORS Settings
-CORS_ORIGIN_ALLOW_ALL = True  # Allow all origins for development
+# CORS Settings - Production ready
+CORS_ORIGIN_ALLOW_ALL = DEBUG  # Only allow all in development
 CORS_ORIGIN_WHITELIST = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -160,6 +161,9 @@ CORS_ORIGIN_WHITELIST = [
     "https://127.0.0.1:3000",
     "https://192.168.86.47:3000",
     "https://10.5.0.2:3000",
+    # Production domains
+    "https://lifeline-kaus.duckdns.org",
+    "https://www.lifeline-kaus.duckdns.org",
 ]
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
@@ -170,6 +174,9 @@ CORS_ALLOWED_ORIGINS = [
     "https://10.5.0.2:3000",
     "http://192.168.86.47:3000",
     "https://192.168.86.47:3000",
+    # Production domains
+    "https://lifeline-kaus.duckdns.org",
+    "https://www.lifeline-kaus.duckdns.org",
 ]
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = [
@@ -192,21 +199,7 @@ CORS_ALLOW_HEADERS = [
     "x-requested-with",
 ]
 
-# Additional security settings for mixed content
-SECURE_CROSS_ORIGIN_OPENER_POLICY = None
-SECURE_REFERRER_POLICY = None
-
-# Allow mixed content for development (HTTPS frontend calling HTTP backend)
-if DEBUG:
-    CORS_ALLOW_ALL_ORIGINS = True
-    CORS_ALLOW_CREDENTIALS = True
-
-# Security settings for HTTPS
-SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-SECURE_SSL_REDIRECT = False  # Nginx handles HTTPS redirect
-USE_TZ = True
-
-# CSRF settings for reverse proxy
+# CSRF settings for production - SECURE APPROACH
 CSRF_TRUSTED_ORIGINS = [
     "https://lifeline-kaus.duckdns.org",
     "https://www.lifeline-kaus.duckdns.org",
@@ -214,22 +207,22 @@ CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",  # For development fallback
 ]
 
-# Session settings for admin
-SESSION_COOKIE_SECURE = True
-SESSION_COOKIE_HTTPONLY = True
-CSRF_COOKIE_SECURE = True
-CSRF_COOKIE_HTTPONLY = True
-
-# Trust proxy headers
-SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-
-# Session and CSRF settings for cross-origin requests
-SESSION_COOKIE_SECURE = False  # Set to True in production
-CSRF_COOKIE_SECURE = False  # Set to True in production
-SESSION_COOKIE_SAMESITE = "Lax"
+# Secure CSRF settings
+CSRF_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_HTTPONLY = False  # Allow JavaScript access for API calls
 CSRF_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_NAME = "csrftoken"
 
-# Rest Framework settings
+# Session security
+SESSION_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+
+# Trust proxy headers for HTTPS detection
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_SSL_REDIRECT = False  # Nginx handles HTTPS redirect
+
+# Rest Framework settings - SECURE TOKEN AUTH
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.TokenAuthentication",
