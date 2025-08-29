@@ -1,6 +1,13 @@
 from django.contrib import admin
-from django.urls import reverse
+from django.urls import reverse, path
 from django.utils.html import format_html
+from django.http import HttpResponse
+from django.template.response import TemplateResponse
+from django.contrib.admin.views.decorators import staff_member_required
+from django.utils.decorators import method_decorator
+from django.db.models import Count, Q
+from django.utils import timezone
+from datetime import timedelta
 
 from .models.chat import Conversation, Message, PromptDebug, Memory, MessageNote
 from .models.user_auth import User
@@ -8,10 +15,101 @@ from .models.user_auth import User
 
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
-    list_display = ["username", "email", "first_name", "last_name", "is_active", "date_joined"]
+    list_display = ["username", "email", "first_name", "last_name", "is_active", "date_joined", "user_overview_link"]
     list_filter = ["is_active", "is_staff", "date_joined"]
     search_fields = ["username", "email", "first_name", "last_name"]
     readonly_fields = ["date_joined", "last_login"]
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "<int:user_id>/overview/",
+                self.admin_site.admin_view(self.user_overview_view),
+                name="api_user_overview",
+            ),
+        ]
+        return custom_urls + urls
+
+    def user_overview_link(self, obj):
+        """Add a link to the user overview page in the list view"""
+        url = reverse("admin:api_user_overview", args=[obj.id])
+        return format_html('<a href="{}" style="color: #007bff;">📊 Overview</a>', url)
+
+    user_overview_link.short_description = "User Overview"
+
+    @method_decorator(staff_member_required)
+    def user_overview_view(self, request, user_id):
+        """Custom view to display comprehensive user overview."""
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return HttpResponse("User not found", status=404)
+
+        # Get user statistics
+        now = timezone.now()
+        last_30_days = now - timedelta(days=30)
+        last_7_days = now - timedelta(days=7)
+
+        # Conversations stats
+        total_conversations = user.conversations.count()
+        active_conversations = user.conversations.filter(is_archived=False).count()
+        recent_conversations = user.conversations.filter(created_at__gte=last_30_days).count()
+
+        # Messages stats
+        total_messages = user.messages.count()
+        user_messages = user.messages.filter(is_bot=False).count()
+        bot_messages = user.messages.filter(is_bot=True).count()
+        recent_messages = user.messages.filter(created_at__gte=last_7_days).count()
+
+        # Memory stats
+        total_memories = user.memories.count()
+        auto_extracted_memories = user.memories.filter(is_auto_extracted=True).count()
+        manual_memories = user.memories.filter(is_auto_extracted=False).count()
+        recent_memories = user.memories.filter(created_at__gte=last_30_days).count()
+
+        # Get recent conversations with message counts
+        recent_conversations_list = user.conversations.annotate(message_count=Count("messages")).order_by(
+            "-updated_at"
+        )[:10]
+
+        # Get all memories organized by type
+        memories_by_type = {}
+        for memory_type, memory_type_display in Memory.MEMORY_TYPES:
+            memories_by_type[memory_type_display] = user.memories.filter(memory_type=memory_type).order_by(
+                "-importance_score", "-updated_at"
+            )
+
+        # Get recent activity (last 10 messages)
+        recent_activity = user.messages.select_related("conversation").order_by("-created_at")[:10]
+
+        context = {
+            "title": f"User Overview: {user.username}",
+            "user": user,
+            "opts": self.model._meta,
+            "has_view_permission": True,
+            "original": user,
+            # Statistics
+            "stats": {
+                "total_conversations": total_conversations,
+                "active_conversations": active_conversations,
+                "recent_conversations": recent_conversations,
+                "total_messages": total_messages,
+                "user_messages": user_messages,
+                "bot_messages": bot_messages,
+                "recent_messages": recent_messages,
+                "total_memories": total_memories,
+                "auto_extracted_memories": auto_extracted_memories,
+                "manual_memories": manual_memories,
+                "recent_memories": recent_memories,
+            },
+            # Data for tabs
+            "recent_conversations_list": recent_conversations_list,
+            "memories_by_type": memories_by_type,
+            "recent_activity": recent_activity,
+        }
+
+        return TemplateResponse(request, "admin/api/user/overview.html", context)
 
 
 class MessageInline(admin.TabularInline):
