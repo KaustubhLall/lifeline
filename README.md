@@ -15,7 +15,9 @@ dynamically.
 system prompts.  
 • **Speech-to-Text**: Real-time audio recording and transcription using OpenAI Whisper models.  
 • **Robust Debugging**: Full prompt logging, token and memory metrics, and a dedicated `PromptDebug` model.  
-• **Secure Authentication**: Token-based auth with optional CSRF exemption middleware for API endpoints.
+• **Secure Authentication**: Token-based auth with optional CSRF exemption middleware for API endpoints.  
+• **Gmail MCP Connector (OAuth2)**: Authenticate a user’s Gmail account (read / send / labels / modify) via Google OAuth
+with refresh token support and per-user credential storage.
 
 ## 🏗️ High-Level Architecture Overview
 
@@ -37,12 +39,13 @@ system prompts.
     - REST API endpoints under `/api/` for login, registration, conversations, messages, memories, notes, and
       transcription.
     - Models: `User`, `Conversation`, `Message`, `Memory`, `PromptDebug`, `MessageNote`.
+    - Models: `User`, `Conversation`, `Message`, `Memory`, `PromptDebug`, `MessageNote`, `MCPConnector`, `MCPOperation`.
     - Serializers to validate and format JSON payloads.
-    - Views orchestrate RAG: retrieve memories, build enhanced prompts, call OpenAI APIs, store debug info.
+    - MCP Views: Gmail OAuth flow, connector management, email operations.
     - Utility modules:
         - **`llm.py`**: OpenAI client, text generation, transcription, TTS, embeddings.
         - **`memory_utils.py`**: Cosine similarity, memory extraction/storage, retrieval, ranking.
-        - **`prompts.py`**: Mode-specific system prompts, memory/context formatting, conversation history.
+        - **`gmail_mcp.py`**: Gmail OAuth 2.0 integration, email operations (send/read/search/labels).
     - Middleware for selective CSRF exemption on token-based API routes.
 
 ### Component Diagram
@@ -55,81 +58,105 @@ flowchart TD
         C[Custom Hooks]
         D[Utilities]
     end
-    
-    subgraph Backend ["Django REST API"]
-        E[Views & Endpoints]
-        F[Serializers]
-        G[Models]
-        H[LLM Utils]
-        I[Memory Utils]
-        J[Prompt Utils]
-    end
-    
-    subgraph External ["External Services"]
-        K[OpenAI API]
-        L[Database]
-    end
-    
-    Frontend -->|HTTP/JSON| Backend
-    Backend -->|API Calls| K
-    Backend -->|ORM| L
-```
+    E[ConnectorsTab]
+
+subgraph Backend ["Django REST API"]
+E[Views & Endpoints]
+F[Views & Endpoints]
+G[Serializers]
+H[Models]
+I[LLM Utils]
+J[Memory Utils]
+K[Prompt Utils]
+L[MCP Utils]
+M[Gmail MCP]
+
+subgraph External ["External Services"]
+K[OpenAI API]
+N[OpenAI API]
+O[Database]
+P[Google OAuth]
+Q[Gmail API]
+
+Frontend -->|HTTP/JSON|Backend
+Backend -->|API Calls|K
+Backend -->|API Calls|N
+Backend -->|ORM|O
+Backend -->|OAuth Flow|P
+Backend -->|Email Operations|Q
+E -->|Connector Management|L
+L -->|Gmail Integration|M
 
 ### System Architecture
 
 ```mermaid
 graph TB
-    subgraph Client ["Client Layer"]
-        UI[React Frontend]
-        STT[Speech-to-Text]
-        Auth[Authentication]
-    end
-    
-    subgraph API ["API Layer"]
-        REST[Django REST Framework]
-        Views[API Views]
-        Middleware[CSRF/Auth Middleware]
-    end
-    
-    subgraph Business ["Business Logic"]
-        Memory[Memory Management]
-        RAG[RAG Engine] 
-        Prompts[Prompt Engineering]
-        LLM[LLM Integration]
-    end
-    
-    subgraph Data ["Data Layer"]
-        Models[Django Models]
-        DB[(SQLite Database)]
-        Embeddings[Vector Embeddings]
-    end
-    
-    subgraph External ["External Services"]
-        OpenAI[OpenAI API]
-        Whisper[Whisper STT]
-    end
-    
-    UI --> REST
-    STT --> REST
-    Auth --> REST
-    REST --> Views
-    Views --> Middleware
-    Views --> Memory
-    Views --> RAG
-    Memory --> Models
-    RAG --> LLM
-    RAG --> Prompts
-    LLM --> OpenAI
-    STT --> Whisper
-    Models --> DB
-    Memory --> Embeddings
+subgraph Client ["Client Layer"]
+UI[React Frontend]
+STT[Speech-to-Text]
+Auth[Authentication]
+end
+Connectors[MCP Connectors UI]
+
+subgraph API ["API Layer"]
+REST[Django REST Framework]
+Views[API Views]
+Middleware[CSRF/Auth Middleware]
+end
+OAuth[OAuth Callbacks]
+
+subgraph Business ["Business Logic"]
+Memory[Memory Management]
+RAG[RAG Engine]
+Prompts[Prompt Engineering]
+LLM[LLM Integration]
+end
+MCP[MCP Connector Management]
+Gmail[Gmail MCP Server]
+
+subgraph Data ["Data Layer"]
+Models[Django Models]
+DB[(SQLite Database)]
+Embeddings[Vector Embeddings]
+end
+Credentials[OAuth Credentials Storage]
+
+subgraph External ["External Services"]
+OpenAI[OpenAI API]
+Whisper[Whisper STT]
+end
+GoogleOAuth[Google OAuth 2.0]
+GmailAPI[Gmail API]
+
+UI --> REST
+STT --> REST
+Auth --> REST
+REST --> Views
+Connectors --> REST
+Views --> Middleware
+REST --> OAuth
+Views --> Memory
+Views --> RAG
+Memory --> Models
+Views --> MCP
+RAG --> LLM
+RAG --> Prompts
+LLM --> OpenAI
+MCP --> Gmail
+STT --> Whisper
+Models --> DB
+OAuth --> GoogleOAuth
+Gmail --> GmailAPI
+Memory --> Embeddings
 ```
+
+    Gmail --> Credentials
 
 ### UML Class Diagram
 
 ```mermaid
 classDiagram
-    %% ─────── Domain Objects ───────
+%% ─────── Domain Objects ───────
     class User {
         +int id
         +string username
@@ -193,13 +220,48 @@ classDiagram
         +datetime created_at
     }
 
-    %% ─────── Relationships ───────
-    User "1"      o-- "many" Conversation : creates
-    User "1"      o-- "many" Message      : writes
-    User "1"      o-- "many" Memory       : owns
-    User "1"      o-- "many" MessageNote  : annotates
+    class MCPConnector {
+        +int id
+        +string connector_type
+        +string name
+        +string status
+        +bool is_enabled
+        +string client_id
+        +string client_secret
+        +string redirect_uri
+        +json scopes
+        +json config
+        +datetime created_at
+        +datetime updated_at
+        +datetime last_authenticated
+        +datetime last_used
+        +mark_as_authenticated()
+        +mark_as_used()
+        +mark_as_error()
+    }
 
-    Conversation "1" o-- "many" Message      : contains
+    class MCPOperation {
+        +int id
+        +string operation_type
+        +string status
+        +json request_data
+        +json response_data
+        +string error_message
+        +datetime started_at
+        +datetime completed_at
+        +int duration_ms
+        +mark_completed()
+    }
+
+%% ─────── Relationships ───────
+User "1"      o-- "many" Conversation: creates
+User "1"      o-- "many" Message: writes
+User "1"      o-- "many" Memory: owns
+User "1"      o-- "many" MessageNote: annotates
+User "1"      o-- "many" MCPConnector: uses
+
+Conversation "1" o-- "many" Message: contains
+MCPConnector "1" o-- "many" MCPOperation: performs
 ```
 
 ## 🚀 Getting Started
@@ -507,31 +569,155 @@ sudo systemctl restart lifeline-backend
 sudo systemctl restart nginx
 ```
 
-## 🤝 Contributing
+### Gmail OAuth / MCP Gmail Connector Troubleshooting
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+Common issues & fixes for the Gmail integration:
 
-## 📄 License
+| Issue                              | Symptom                                                 | Fix                                                                                                                                                                                                          |
+|------------------------------------|---------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| redirect_uri_mismatch              | Google page shows Error 400                             | Add `http://localhost:8000/api/auth/gmail/callback` (and prod URL) under Authorized redirect URIs in Google Cloud Console. Make sure exact scheme/host/path matches.                                         |
+| 404 /settings                      | After successful auth you see Django 404 at `/settings` | Ensure `FRONTEND_URL` is set (e.g. `http://localhost:3000/`) so backend callback redirects to React app instead of Django root.                                                                              |
+| No refresh token returned          | Subsequent API calls fail after token expiry            | First consent must include `access_type=offline` & `prompt=consent`. Our flow forces `prompt=consent`; if missing refresh token, revoke app access at https://myaccount.google.com/permissions then re-auth. |
+| Missing consent screen scopes      | Google warns about unverified app                       | Limit scopes to only what you need; current scopes: gmail.readonly, gmail.send, gmail.modify, gmail.labels. Submit for verification if making public.                                                        |
+| Credentials not persisting         | Re-auth every time                                      | Verify credentials JSON is stored in `api/utils/connectors/gmail/credentials/` and process has write permissions.                                                                                            |
+| Using wrong redirect in production | Works locally, fails on server                          | Set `GMAIL_OAUTH_REDIRECT_URI` in production env to `https://your-domain/api/auth/gmail/callback` and register that in Google Cloud.                                                                         |
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+---
 
-## 🆘 Support
+## 📧 Gmail OAuth (MCP Gmail Connector) Integration Guide
 
-- **Issues**: https://github.com/your-repo/lifeline/issues
-- **Documentation**: Check this README and inline code comments
-- **Deployment Help**: See the `setup-duckdns.md` guide for domain setup
+This section documents how the Gmail connector works, how redirect URIs are resolved, and how to configure local &
+production environments.
 
-## 🔄 Updates
+### 1. What the Connector Does
 
-The application automatically updates when you push to the main branch. The GitHub Action will:
+The Gmail MCP connector lets users:
 
-1. Build the frontend
-2. Deploy to your EC2 instance
-3. Restart services
-4. Verify deployment health
+- Authenticate with Google via OAuth 2.0 (per-user state token = user ID)
+- Obtain offline access (refresh tokens) so the app can send / read / label email without re-prompting each session
+- Persist credentials securely per user (`gmail_credentials_<user_id>.json`)
+- Perform operations: list labels, search, read, send, modify labels, delete, create label
 
-Monitor deployment status in the GitHub Actions tab of your repository.
+### 2. OAuth Flow Overview
+
+1. Frontend calls `GET /api/mcp/gmail/auth/`.
+2. Backend (Django) builds auth URL (using env redirect URI or first value in uploaded OAuth config or default localhost
+   fallback) and returns it.
+3. User consents on Google; Google redirects to backend callback: `/api/auth/gmail/callback`.
+4. Backend exchanges code for tokens (includes refresh token on first consent) and stores credentials JSON per user.
+5. Backend redirects to frontend settings page: `${FRONTEND_URL}/settings?auth_success=gmail`.
+6. Frontend detects query param, shows success UI, and refreshes connector status.
+
+### 3. Redirect URI Resolution Logic (Priority Order)
+
+When generating the auth URL or handling callback:
+
+1. `GMAIL_OAUTH_REDIRECT_URI` setting / env (if provided)
+2. First `redirect_uris[0]` in uploaded OAuth client JSON (Google-provided file)
+3. Fallback: `http://localhost:8000/api/auth/gmail/callback`
+
+You MUST register the effective redirect URI in the Google Cloud Console (OAuth Client → Authorized redirect URIs).
+Exact match required (scheme, host, path, no trailing slash mismatch).
+
+### 4. Environment Variables (Backend)
+
+Add to backend `.env` (or production secrets):
+
+```
+GMAIL_OAUTH_CLIENT_ID=your_google_client_id
+GMAIL_OAUTH_CLIENT_SECRET=your_google_client_secret
+GMAIL_OAUTH_REDIRECT_URI=http://localhost:8000/api/auth/gmail/callback
+FRONTEND_URL=http://localhost:3000/
+```
+
+If `GMAIL_OAUTH_CLIENT_ID` & `GMAIL_OAUTH_CLIENT_SECRET` are set, you *do not* need to upload a JSON file—the code
+builds an in-memory config. If not set, you can upload the downloaded `client_secret_*.json` file via the UI (
+Connectors → Upload OAuth Config).
+
+### 5. Frontend Behavior
+
+- The upload modal fetches `GET /api/mcp/gmail/upload-config/` to display the currently detected redirect URI.
+- On successful callback, backend redirects to `${FRONTEND_URL}/settings?auth_success=gmail` so the React app can parse
+  success params.
+- If there is an error (`auth_error=...`) the frontend shows an alert and resets state.
+
+### 6. Required Scopes
+
+Scopes requested (least privilege for current features):
+
+```
+https://www.googleapis.com/auth/gmail.readonly
+https://www.googleapis.com/auth/gmail.send
+https://www.googleapis.com/auth/gmail.modify
+https://www.googleapis.com/auth/gmail.labels
+```
+
+Modify only if adding new features (e.g. drafts). Avoid broad scopes unless necessary.
+
+### 7. Creating OAuth Credentials (Google Cloud Console)
+
+1. Go to: https://console.cloud.google.com/
+2. Enable Gmail API (APIs & Services → Library → "Gmail API" → Enable)
+3. Create OAuth consent screen (internal or external depending on use)
+4. Create Credentials → OAuth Client ID → Application Type: Web Application
+5. Add Authorized redirect URI(s):
+    - `http://localhost:8000/api/auth/gmail/callback`
+    - Production: `https://your-domain.com/api/auth/gmail/callback`
+6. (Optional) JS origin (only needed if doing direct browser token flow—not used here)
+7. Save; copy Client ID & Secret → store in `.env` or upload JSON.
+
+### 8. Authenticating Locally
+
+1. Ensure backend running on 8000 & frontend on 3000
+2. Verify redirect URI added to Google Console
+3. Add env vars (or upload OAuth JSON)
+4. In app: Open Connectors tab → Gmail → Authenticate
+5. Consent → redirected back → success message
+
+### 9. Credential Storage & Refresh
+
+- Stored at: `api/utils/connectors/gmail/credentials/gmail_credentials_<user_id>.json`
+- Code auto-refreshes tokens if expired (requires refresh token—only returned first consent with `prompt=consent`).
+- To force a new refresh token: revoke app access in Google Account permissions and re-authenticate.
+
+### 10. Security Notes
+
+- Never commit OAuth JSON or credentials directory.
+- Use environment variables in production and secret storage (e.g. AWS Secrets Manager) for Client Secret.
+- Set `DEBUG=False` in production.
+- Limit scopes to only what you need; sensitive scope expansion may require Google verification.
+
+### 11. Production Checklist
+
+| Item                     | Action                                                                |
+|--------------------------|-----------------------------------------------------------------------|
+| Custom Domain            | Set DNS & `ALLOWED_HOSTS` / reverse proxy (nginx)                     |
+| HTTPS                    | Use Let’s Encrypt or managed certs; update redirect URI to `https://` |
+| FRONTEND_URL             | Set to `https://your-domain/`                                         |
+| GMAIL_OAUTH_REDIRECT_URI | Exact `https://your-domain/api/auth/gmail/callback`                   |
+| Rotation                 | Periodically rotate client secret if needed                           |
+| Logs                     | Monitor connector errors for token refresh failures                   |
+
+### 12. Programmatic Operations (API Endpoint)
+
+POST `/api/mcp/gmail/operations/` with JSON body:
+
+```
+{
+  "operation": "search_emails",
+  "data": {"query": "in:inbox", "max_results": 5}
+}
+```
+
+Returns operation result or `{ "error": "..." }`.
+
+Supported `operation` values: `list_labels`, `search_emails`, `send_email`, `read_email`, `modify_email`,
+`delete_email`, `create_label`.
+
+### 13. Common Errors & Fix Summary
+
+| Error                 | Root Cause                           | Resolution                                      |
+|-----------------------|--------------------------------------|-------------------------------------------------|
+| redirect_uri_mismatch | Unregistered callback                | Register the exact URI in Google Console        |
+| Missing code/state    | User aborted or URL params stripped  | Retry auth; ensure no proxy strips query params |
+| No refresh token      | Prior consent without offline prompt | Revoke app, re-auth with forced consent         |
