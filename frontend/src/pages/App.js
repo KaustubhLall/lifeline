@@ -66,7 +66,8 @@ function App() {
 
     const chatModes = [
         {value: 'conversational', label: 'Conversational'},
-        {value: 'coaching', label: 'Coaching'}
+        {value: 'coaching', label: 'Coaching'},
+        {value: 'agent', label: 'Agent'}
     ];
 
     // Consolidate errors from hooks

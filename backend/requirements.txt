@@ -10,6 +10,8 @@ openai
 langchain
 langgraph
 tiktoken
+langchain-mcp-adapters
+mcp
 
 # comms
 twilio

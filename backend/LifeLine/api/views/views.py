@@ -357,6 +357,66 @@ class MessageListCreateView(APIView):
                 f"[DEBUG ENTRY] Created debug entry {debug_entry.id} with system_prompt: {len(debug_entry.system_prompt)} chars, memory_context: {len(debug_entry.memory_context)} chars, conversation_history: {len(debug_entry.conversation_history)} chars"
             )
 
+            # Agent mode: attempt tool invocation instead of direct LLM if intent matches
+            if mode == "agent":
+                try:
+                    from ..utils.agent_mcp import handle_agent_tools
+
+                    tool_exec = handle_agent_tools(request.user, user_message)
+                except Exception as _agent_err:  # pragma: no cover
+                    logger.error(f"[AGENT MODE] Tool handling error: {_agent_err}")
+                    tool_exec = None
+
+                if tool_exec:
+                    tool_metadata = {
+                        "model": model,
+                        "mode": mode,
+                        "agent_tool_operation": tool_exec.get("operation"),
+                        "agent_tool_args": tool_exec.get("args"),
+                        "agent_tool_raw_result": tool_exec.get("raw_result"),
+                        "used_memories": len(all_memories),
+                        "relevant_memories": len(relevant_memories),
+                        "conversation_memories": len(conversation_memories),
+                        "prompt_length": len(enhanced_prompt),
+                        "history_messages_included": len(message_history),
+                        "debug_entry_id": debug_entry.id,
+                    }
+                    bot_msg = Message.objects.create(
+                        conversation=conversation,
+                        sender=request.user,
+                        content=tool_exec.get("response_text", "(No response)"),
+                        raw_user_input="",
+                        full_prompt="",
+                        is_bot=True,
+                        role="assistant",
+                        metadata=tool_metadata,
+                    )
+                    debug_entry.bot_response = bot_msg
+                    debug_entry.response_time_ms = 0
+                    debug_entry.save()
+                    conversation.context = {
+                        **conversation.context,
+                        "last_user_message": user_message,
+                        "last_bot_response": bot_msg.content,
+                        "message_count": conversation.messages.count(),
+                        "current_mode": mode,
+                        "current_model": model,
+                        "agent_last_tool_operation": tool_exec.get("operation"),
+                    }
+                    conversation.save()
+                    return Response(
+                        {
+                            "id": bot_msg.id,
+                            "sender": bot_msg.sender_id,
+                            "content": bot_msg.content,
+                            "created_at": bot_msg.created_at,
+                            "is_bot": True,
+                            "role": "assistant",
+                            "metadata": bot_msg.metadata,
+                        },
+                        status=status.HTTP_201_CREATED,
+                    )
+
             try:
                 logger.info(f"[LLM CALL] Calling LLM with model={model}, prompt_length={len(enhanced_prompt)}")
                 start_time = time.time()
