@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.db import models
 from django.utils import timezone
 import json
+import datetime
 
 User = get_user_model()
 
@@ -85,7 +86,7 @@ class MCPConnector(models.Model):
         if expiry:
             # Ensure timezone-aware
             if timezone.is_naive(expiry):
-                expiry = timezone.make_aware(expiry, timezone.utc)
+                expiry = timezone.make_aware(expiry, datetime.timezone.utc)
             self.token_expiry = expiry
         self.has_refresh_token = bool(getattr(credentials, "refresh_token", None))
         self.mark_as_authenticated()

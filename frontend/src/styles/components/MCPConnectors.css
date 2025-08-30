@@ -91,6 +91,16 @@
     background-color: #45a049;
 }
 
+.auth-button:disabled {
+    background-color: #BDBDBD; /* Grey background for disabled state */
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.auth-button:disabled:hover {
+    background-color: #BDBDBD; /* Keep background color on hover */
+}
+
 .test-button {
     background-color: #2196F3;
     color: white;
@@ -100,6 +110,16 @@
     background-color: #1976D2;
 }
 
+.test-button:disabled {
+    background-color: #BDBDBD; /* Grey background for disabled state */
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.test-button:disabled:hover {
+    background-color: #BDBDBD; /* Keep background color on hover */
+}
+
 .reauth-button {
     background-color: #FF9800;
     color: white;
@@ -107,6 +127,16 @@
 
 .reauth-button:hover {
     background-color: #F57C00;
+}
+
+.reauth-button:disabled {
+    background-color: #BDBDBD; /* Grey background for disabled state */
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.reauth-button:disabled:hover {
+    background-color: #BDBDBD; /* Keep background color on hover */
 }
 
 .operations-history {
@@ -222,7 +252,6 @@
     width: 90%;
     max-width: 600px;
     max-height: 80%;
-    overflow: hidden;
     display: flex;
     flex-direction: column;
 }
@@ -296,6 +325,16 @@
     background-color: #1976D2;
 }
 
+.test-op-button:disabled {
+    background-color: #BDBDBD; /* Grey background for disabled state */
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.test-op-button:disabled:hover {
+    background-color: #BDBDBD; /* Keep background color on hover */
+}
+
 .test-result {
     border-top: 1px solid #e1e5e9;
     padding-top: 20px;
@@ -343,6 +382,16 @@
 
 .config-button:hover {
     background-color: #7B1FA2;
+}
+
+.config-button:disabled {
+    background-color: #BDBDBD; /* Grey background for disabled state */
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.config-button:disabled:hover {
+    background-color: #BDBDBD; /* Keep background color on hover */
 }
 
 .upload-dialog {

@@ -23,6 +23,7 @@ from ..utils.memory_utils import (
     get_conversation_memories,
 )
 from ..utils.prompts import build_enhanced_prompt, get_system_prompt, validate_mode
+from ..utils.agent_utils import run_agent
 
 # Configure logging with filename and line numbers
 logging.basicConfig(
@@ -218,9 +219,10 @@ class MessageListCreateView(APIView):
             user_message = request.data.get("content")
             model = request.data.get("model", "gpt-4.1-nano")
             mode = request.data.get("mode", "conversational")
+            temperature = request.data.get("temperature", 0.2)
 
             logger.info(
-                f"Processing message for conversation {conversation_id} - User: {request.user.username}, Model: {model}, Mode: {mode}, Length: {len(user_message) if user_message else 0}"
+                f"Processing message for conversation {conversation_id} - User: {request.user.username}, Model: {model}, Mode: {mode}, Temp: {temperature}, Length: {len(user_message) if user_message else 0}"
             )
 
             if not user_message:
@@ -345,7 +347,7 @@ class MessageListCreateView(APIView):
                 conversation_history=conversation_history_text,
                 model_used=model,
                 mode_used=mode,
-                temperature=0.0,
+                temperature=temperature,
                 prompt_length=len(enhanced_prompt),
                 memories_used_count=len(all_memories),
                 relevant_memories_count=len(relevant_memories),
@@ -357,65 +359,63 @@ class MessageListCreateView(APIView):
                 f"[DEBUG ENTRY] Created debug entry {debug_entry.id} with system_prompt: {len(debug_entry.system_prompt)} chars, memory_context: {len(debug_entry.memory_context)} chars, conversation_history: {len(debug_entry.conversation_history)} chars"
             )
 
-            # Agent mode: attempt tool invocation instead of direct LLM if intent matches
+            # Agent mode: Use the agent utility directly
             if mode == "agent":
                 try:
-                    from ..utils.agent_mcp import handle_agent_tools
+                    logger.info(f"[AGENT MODE] Starting agent for user: {request.user.username}")
 
-                    tool_exec = handle_agent_tools(request.user, user_message)
-                except Exception as _agent_err:  # pragma: no cover
-                    logger.error(f"[AGENT MODE] Tool handling error: {_agent_err}")
-                    tool_exec = None
+                    # Call the agent utility function directly
+                    final_response = run_agent(
+                        user=request.user,
+                        conversation_id=conversation.id,
+                        question=user_message,
+                        model=model,  # Pass the model from the request
+                        temperature=temperature,
+                    )
 
-                if tool_exec:
-                    tool_metadata = {
-                        "model": model,
-                        "mode": mode,
-                        "agent_tool_operation": tool_exec.get("operation"),
-                        "agent_tool_args": tool_exec.get("args"),
-                        "agent_tool_raw_result": tool_exec.get("raw_result"),
-                        "used_memories": len(all_memories),
-                        "relevant_memories": len(relevant_memories),
-                        "conversation_memories": len(conversation_memories),
-                        "prompt_length": len(enhanced_prompt),
-                        "history_messages_included": len(message_history),
-                        "debug_entry_id": debug_entry.id,
-                    }
+                    logger.info(f"[AGENT MODE] Agent finished with response: {final_response[:200]}...")
+
+                    # Create the bot message with the final answer
                     bot_msg = Message.objects.create(
                         conversation=conversation,
                         sender=request.user,
-                        content=tool_exec.get("response_text", "(No response)"),
-                        raw_user_input="",
-                        full_prompt="",
+                        content=final_response,
                         is_bot=True,
                         role="assistant",
-                        metadata=tool_metadata,
+                        metadata={
+                            "model": model,
+                            "mode": mode,
+                            "agent_framework": "run_agent",
+                            "debug_entry_id": debug_entry.id,
+                        },
                     )
+
                     debug_entry.bot_response = bot_msg
-                    debug_entry.response_time_ms = 0
                     debug_entry.save()
-                    conversation.context = {
-                        **conversation.context,
-                        "last_user_message": user_message,
-                        "last_bot_response": bot_msg.content,
-                        "message_count": conversation.messages.count(),
-                        "current_mode": mode,
-                        "current_model": model,
-                        "agent_last_tool_operation": tool_exec.get("operation"),
-                    }
+
+                    conversation.context.update({"last_bot_response": bot_msg.content})
                     conversation.save()
+
                     return Response(
                         {
                             "id": bot_msg.id,
-                            "sender": bot_msg.sender_id,
                             "content": bot_msg.content,
                             "created_at": bot_msg.created_at,
-                            "is_bot": True,
-                            "role": "assistant",
-                            "metadata": bot_msg.metadata,
+                            "is_bot": bot_msg.is_bot,
                         },
                         status=status.HTTP_201_CREATED,
                     )
+
+                except Exception as agent_err:
+                    logger.error(f"[AGENT MODE] Agent execution failed: {agent_err}", exc_info=True)
+                    bot_msg = Message.objects.create(
+                        conversation=conversation,
+                        sender=request.user,
+                        content=f"An error occurred in agent mode: {agent_err}",
+                        is_bot=True,
+                        role="assistant",
+                    )
+                    return Response({"id": bot_msg.id, "content": bot_msg.content}, status=status.HTTP_201_CREATED)
 
             try:
                 logger.info(f"[LLM CALL] Calling LLM with model={model}, prompt_length={len(enhanced_prompt)}")
