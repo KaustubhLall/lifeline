@@ -121,12 +121,21 @@ export function useConversations(authenticated, onLogout) {
                 throw new Error(errorText || 'Failed to send message');
             }
 
-            const botMsg = await response.json();
-            console.log('Bot message received:', botMsg); // Debug log
-            console.log('Bot message metadata:', botMsg.metadata); // Debug log
-            
-            setMessages(m => m.map(msg => msg.id === tempId ? {...msg, pending: false} : msg));
-            setMessages(m => [...m, {...botMsg}]); // Ensure proper object spread
+            const data = await response.json();
+            const finalUserMessage = data.user_message;
+            const botMessage = data.bot_message;
+
+            console.log('Final user message received:', finalUserMessage); // Debug log
+            console.log('Bot message received:', botMessage); // Debug log
+
+            // Replace optimistic message with final one from server and add bot message
+            setMessages(prevMessages => {
+                const updatedMessages = prevMessages.map(msg =>
+                    msg.id === tempId ? finalUserMessage : msg
+                );
+                return [...updatedMessages, botMessage];
+            });
+
         } catch (e) {
             const errorMessage = e.message.includes('budget')
                 ? 'API budget exceeded. Please try again later or contact support.'

@@ -7,6 +7,17 @@
     font-size: 0.85rem;
 }
 
+.metadata-empty {
+    text-align: center;
+    color: rgba(255, 255, 255, 0.6);
+    font-style: italic;
+    padding: 8px;
+}
+
+.metadata-empty p {
+    margin: 0;
+}
+
 .metadata-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));

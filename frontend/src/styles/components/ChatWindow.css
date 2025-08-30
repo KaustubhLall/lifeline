@@ -55,6 +55,24 @@
     color: #ccc;
 }
 
+.metadata-toggle-btn-small {
+    background: none;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    padding: 1px 4px;
+    border-radius: 2px;
+    font-size: 0.7rem;
+    transition: all 0.2s ease;
+    margin-left: 6px;
+    opacity: 0.6;
+}
+
+.metadata-toggle-btn-small:hover {
+    color: #ccc;
+    opacity: 1;
+}
+
 .message-sender .bi {
     margin-right: 8px;
     font-size: 1.2rem;

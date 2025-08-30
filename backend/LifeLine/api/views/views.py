@@ -14,7 +14,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ..models.chat import Conversation, Message, MessageNote, Memory, PromptDebug
-from ..serializers import MemorySerializer, MemoryCreateSerializer
+from ..serializers import MemorySerializer, MemoryCreateSerializer, MessageSerializer
 from ..utils.llm import call_llm_text, APIBudgetError, ModelNotAvailableError, LLMError
 from ..utils.memory_utils import (
     extract_and_store_memory,
@@ -426,12 +426,13 @@ class MessageListCreateView(APIView):
                     conversation.context.update({"last_bot_response": bot_msg.content})
                     conversation.save()
 
+                    user_message_serializer = MessageSerializer(user_msg)
+                    bot_message_serializer = MessageSerializer(bot_msg)
+
                     return Response(
                         {
-                            "id": bot_msg.id,
-                            "content": bot_msg.content,
-                            "created_at": bot_msg.created_at,
-                            "is_bot": bot_msg.is_bot,
+                            "user_message": user_message_serializer.data,
+                            "bot_message": bot_message_serializer.data,
                         },
                         status=status.HTTP_201_CREATED,
                     )
@@ -529,15 +530,13 @@ class MessageListCreateView(APIView):
 
                 logger.info(f"[CONVERSATION UPDATE] Updated conversation {conversation_id} context with enhanced stats")
 
+                user_message_serializer = MessageSerializer(user_msg)
+                bot_message_serializer = MessageSerializer(bot_msg)
+
                 return Response(
                     {
-                        "id": bot_msg.id,
-                        "sender": bot_msg.sender_id,
-                        "content": bot_response_text,
-                        "created_at": bot_msg.created_at,
-                        "is_bot": True,
-                        "role": "assistant",
-                        "metadata": bot_msg.metadata,
+                        "user_message": user_message_serializer.data,
+                        "bot_message": bot_message_serializer.data,
                     },
                     status=status.HTTP_201_CREATED,
                 )
