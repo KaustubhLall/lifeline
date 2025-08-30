@@ -36,6 +36,43 @@
     --error-text: #ffffff;
     --error-border: #dc3545;
 
+    /* Modal/Popup Colors - Dark Theme */
+    --modal-bg: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+    --modal-overlay: rgba(0, 0, 0, 0.8);
+    --modal-border: rgba(255, 255, 255, 0.15);
+    --modal-header-bg: linear-gradient(135deg, #2d3748, #1a202c);
+    
+    /* Card/Container Colors */
+    --card-bg: rgba(255, 255, 255, 0.05);
+    --card-border: rgba(255, 255, 255, 0.1);
+    --card-hover-bg: rgba(255, 255, 255, 0.08);
+    
+    /* Button Colors */
+    --btn-primary-bg: #007bff;
+    --btn-primary-hover: #0056b3;
+    --btn-secondary-bg: rgba(255, 255, 255, 0.1);
+    --btn-secondary-hover: rgba(255, 255, 255, 0.2);
+    --btn-success-bg: #28a745;
+    --btn-success-hover: #1e7e34;
+    --btn-warning-bg: #ffc107;
+    --btn-warning-hover: #e0a800;
+    --btn-danger-bg: #dc3545;
+    --btn-danger-hover: #c82333;
+    
+    /* Status Colors */
+    --status-success-bg: rgba(40, 167, 69, 0.2);
+    --status-success-text: #51cf66;
+    --status-success-border: rgba(40, 167, 69, 0.3);
+    --status-error-bg: rgba(220, 53, 69, 0.2);
+    --status-error-text: #ff6b6b;
+    --status-error-border: rgba(220, 53, 69, 0.3);
+    --status-warning-bg: rgba(255, 193, 7, 0.2);
+    --status-warning-text: #ffd43b;
+    --status-warning-border: rgba(255, 193, 7, 0.3);
+    --status-info-bg: rgba(23, 162, 184, 0.2);
+    --status-info-text: #74c0fc;
+    --status-info-border: rgba(23, 162, 184, 0.3);
+
     /* Layout */
     --sidebar-width: 320px; /* Increased from 280px */
     --header-height: 70px;
@@ -222,4 +259,191 @@
         transform: scale(1);
         box-shadow: 0 0 0 0 rgba(220, 53, 69, 0);
     }
+}
+
+/* ===== GLOBAL MODAL/POPUP DARK THEME STYLES ===== */
+
+/* All modal overlays */
+.modal-backdrop,
+.settings-overlay,
+[class*="overlay"] {
+    background: var(--modal-overlay) !important;
+    backdrop-filter: blur(5px) !important;
+}
+
+/* All modal containers - less aggressive */
+.modal,
+.modal-dialog,
+.modal-content {
+    background: var(--modal-bg) !important;
+    border: 1px solid var(--modal-border) !important;
+    color: var(--text-color) !important;
+}
+
+/* Specific modal/popup targeting */
+[class*="test-dialog"],
+[class*="upload-dialog"],
+[class*="auth-dialog"] {
+    background: var(--modal-bg) !important;
+    border: 1px solid var(--modal-border) !important;
+    color: var(--text-color) !important;
+}
+
+/* Modal headers */
+.modal-header,
+[class*="modal-header"],
+[class*="popup-header"] {
+    background: var(--modal-header-bg) !important;
+    border-bottom: 1px solid var(--modal-border) !important;
+    color: var(--text-color) !important;
+}
+
+/* Modal bodies and content */
+.modal-body,
+.modal-content,
+[class*="modal-body"],
+[class*="popup-body"],
+[class*="dialog-content"] {
+    background: var(--modal-bg) !important;
+    color: var(--text-color) !important;
+}
+
+/* All text in modals */
+.modal h1, .modal h2, .modal h3, .modal h4, .modal h5, .modal h6,
+.modal p, .modal span, .modal div, .modal label,
+[class*="modal"] h1, [class*="modal"] h2, [class*="modal"] h3,
+[class*="modal"] p, [class*="modal"] span, [class*="modal"] div, [class*="modal"] label,
+[class*="popup"] h1, [class*="popup"] h2, [class*="popup"] h3,
+[class*="popup"] p, [class*="popup"] span, [class*="popup"] div, [class*="popup"] label {
+    color: var(--text-color) !important;
+}
+
+/* Muted text in modals */
+.modal .text-muted,
+.modal [class*="muted"],
+[class*="modal"] .text-muted,
+[class*="modal"] [class*="muted"],
+[class*="popup"] .text-muted,
+[class*="popup"] [class*="muted"] {
+    color: var(--text-muted) !important;
+}
+
+/* Form elements in modals */
+.modal input, .modal textarea, .modal select,
+[class*="modal"] input, [class*="modal"] textarea, [class*="modal"] select,
+[class*="popup"] input, [class*="popup"] textarea, [class*="popup"] select {
+    background: var(--input-field-bg) !important;
+    border: 1px solid var(--card-border) !important;
+    color: var(--text-color) !important;
+}
+
+.modal input::placeholder, .modal textarea::placeholder,
+[class*="modal"] input::placeholder, [class*="modal"] textarea::placeholder,
+[class*="popup"] input::placeholder, [class*="popup"] textarea::placeholder {
+    color: var(--text-light) !important;
+}
+
+/* Buttons in modals */
+.modal .btn, [class*="modal"] .btn, [class*="popup"] .btn,
+.modal button, [class*="modal"] button, [class*="popup"] button {
+    border: 1px solid transparent !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease !important;
+}
+
+.modal .btn-primary, [class*="modal"] .btn-primary, [class*="popup"] .btn-primary {
+    background: var(--btn-primary-bg) !important;
+    border-color: var(--btn-primary-bg) !important;
+    color: white !important;
+}
+
+.modal .btn-primary:hover, [class*="modal"] .btn-primary:hover, [class*="popup"] .btn-primary:hover {
+    background: var(--btn-primary-hover) !important;
+    border-color: var(--btn-primary-hover) !important;
+}
+
+.modal .btn-secondary, [class*="modal"] .btn-secondary, [class*="popup"] .btn-secondary {
+    background: var(--btn-secondary-bg) !important;
+    border-color: var(--card-border) !important;
+    color: var(--text-color) !important;
+}
+
+.modal .btn-secondary:hover, [class*="modal"] .btn-secondary:hover, [class*="popup"] .btn-secondary:hover {
+    background: var(--btn-secondary-hover) !important;
+}
+
+.modal .btn-success, [class*="modal"] .btn-success, [class*="popup"] .btn-success {
+    background: var(--btn-success-bg) !important;
+    border-color: var(--btn-success-bg) !important;
+    color: white !important;
+}
+
+.modal .btn-warning, [class*="modal"] .btn-warning, [class*="popup"] .btn-warning {
+    background: var(--btn-warning-bg) !important;
+    border-color: var(--btn-warning-bg) !important;
+    color: #212529 !important;
+}
+
+.modal .btn-danger, [class*="modal"] .btn-danger, [class*="popup"] .btn-danger {
+    background: var(--btn-danger-bg) !important;
+    border-color: var(--btn-danger-bg) !important;
+    color: white !important;
+}
+
+/* Alert/Status messages in modals */
+.modal .alert, [class*="modal"] .alert, [class*="popup"] .alert {
+    border-radius: 6px !important;
+    font-size: 0.9rem !important;
+    margin: 1rem 0 !important;
+}
+
+.modal .alert-success, [class*="modal"] .alert-success, [class*="popup"] .alert-success {
+    background: var(--status-success-bg) !important;
+    color: var(--status-success-text) !important;
+    border: 1px solid var(--status-success-border) !important;
+}
+
+.modal .alert-danger, [class*="modal"] .alert-danger, [class*="popup"] .alert-danger {
+    background: var(--status-error-bg) !important;
+    color: var(--status-error-text) !important;
+    border: 1px solid var(--status-error-border) !important;
+}
+
+.modal .alert-warning, [class*="modal"] .alert-warning, [class*="popup"] .alert-warning {
+    background: var(--status-warning-bg) !important;
+    color: var(--status-warning-text) !important;
+    border: 1px solid var(--status-warning-border) !important;
+}
+
+.modal .alert-info, [class*="modal"] .alert-info, [class*="popup"] .alert-info {
+    background: var(--status-info-bg) !important;
+    color: var(--status-info-text) !important;
+    border: 1px solid var(--status-info-border) !important;
+}
+
+/* Code blocks in modals */
+.modal pre, .modal code,
+[class*="modal"] pre, [class*="modal"] code,
+[class*="popup"] pre, [class*="popup"] code {
+    background: rgba(0, 0, 0, 0.3) !important;
+    color: var(--text-color) !important;
+    border: 1px solid var(--card-border) !important;
+}
+
+/* Lists in modals */
+.modal ul, .modal ol, .modal li,
+[class*="modal"] ul, [class*="modal"] ol, [class*="modal"] li,
+[class*="popup"] ul, [class*="popup"] ol, [class*="popup"] li {
+    color: var(--text-color) !important;
+}
+
+/* Links in modals */
+.modal a, [class*="modal"] a, [class*="popup"] a {
+    color: #74c0fc !important;
+    text-decoration: none !important;
+}
+
+.modal a:hover, [class*="modal"] a:hover, [class*="popup"] a:hover {
+    color: #91d5ff !important;
+    text-decoration: underline !important;
 }

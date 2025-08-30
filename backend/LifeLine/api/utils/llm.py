@@ -1,7 +1,9 @@
 import inspect
+import json
 import logging
 import os
 import traceback
+from datetime import datetime
 from typing import Optional
 
 from openai import OpenAI
@@ -282,7 +284,6 @@ def call_llm_conversation_memory_extraction(user_message: str, ai_response: str,
     Raises:
         LLMError: If memory extraction fails
     """
-    from datetime import datetime
     if not current_date:
         current_date = datetime.now().strftime("%Y-%m-%d")
     
@@ -338,7 +339,6 @@ Only extract memories that would be genuinely useful to remember later.
         response = call_llm_text(extraction_prompt, model=model, temperature=0.1)
 
         # Try to parse the JSON response
-        import json
 
         try:
             memory_data = json.loads(response)
@@ -407,7 +407,6 @@ def call_llm_memory_extraction(message_content: str, model: str = "gpt-4o-mini")
         response = call_llm_text(extraction_prompt, model=model, temperature=0.1)
 
         # Try to parse the JSON response
-        import json
 
         try:
             memory_data = json.loads(response)

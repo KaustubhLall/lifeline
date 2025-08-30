@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import json
 import logging
 import mimetypes
 import os
@@ -21,6 +22,16 @@ from googleapiclient.discovery import build
 User = get_user_model()
 logger = logging.getLogger(__name__)
 
+# Shared ThreadPoolExecutor to avoid resource exhaustion
+_shared_executor = None
+
+def get_shared_executor():
+    """Get or create shared ThreadPoolExecutor for all Gmail operations."""
+    global _shared_executor
+    if _shared_executor is None:
+        _shared_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="gmail-mcp")
+    return _shared_executor
+
 
 class GmailMCPServer:
     """Gmail MCP Server with DB-backed credentials (MCPConnector)."""
@@ -36,7 +47,7 @@ class GmailMCPServer:
         self.user_id = user_id
         self.service = None
         self.credentials = None
-        self.executor = ThreadPoolExecutor(max_workers=4)
+        self.executor = get_shared_executor()  # Use shared executor
         self._connector = None
 
     def get_connector(self):
@@ -144,8 +155,6 @@ class GmailMCPServer:
         config_path = self.get_oauth_config_path()
         if os.path.exists(config_path):
             try:
-                import json
-
                 with open(config_path, "r", encoding="utf-8") as f:
                     return json.load(f)
             except Exception as e:
@@ -238,12 +247,13 @@ class GmailMCPServer:
         attachments: List[str] = None,
         mime_type: str = "text/plain",
     ) -> Dict[str, str]:
-        """Create email message"""
+        """Create email message with proper MIME construction"""
+        # Always use MIMEMultipart for consistency when we have attachments or HTML
         if attachments or html_body:
-            msg_root = MIMEMultipart()
-            msg_root.attach(MIMEText(body, "plain"))
+            message = MIMEMultipart()
+            message.attach(MIMEText(body, "plain"))
             if html_body:
-                msg_root.attach(MIMEText(html_body, "html"))
+                message.attach(MIMEText(html_body, "html"))
             if attachments:
                 for fp in attachments:
                     if os.path.exists(fp):
@@ -256,10 +266,11 @@ class GmailMCPServer:
                             part.set_payload(f.read())
                         encoders.encode_base64(part)
                         part.add_header("Content-Disposition", f'attachment; filename="{os.path.basename(fp)}"')
-                        msg_root.attach(part)
-            message = msg_root
+                        message.attach(part)
         else:
+            # Use MIMEText directly for simple messages
             message = MIMEText(body, _subtype="html" if mime_type == "text/html" else "plain")
+        
         message["to"] = ", ".join(to)
         message["subject"] = subject
         if cc:

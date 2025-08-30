@@ -179,6 +179,147 @@
     background-color: rgba(255, 255, 255, 0.1);
 }
 
+/* Markdown table container for horizontal scrolling */
+.message .table-container {
+    position: relative;
+    width: 100%;
+    overflow-x: auto;
+    margin: 0.75rem 0;
+    border-radius: 0.5rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    background-color: rgba(255, 255, 255, 0.05);
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.3) rgba(0, 0, 0, 0.2);
+}
+
+.message .table-container::-webkit-scrollbar {
+    height: 8px;
+}
+
+.message .table-container::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+
+.message .table-container::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+}
+
+.message .table-container::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.5);
+}
+
+.message .table-actions {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    display: flex;
+    gap: 0.5rem;
+    z-index: 10;
+}
+
+.message .table-copy-btn {
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.message .table-copy-btn:hover {
+    background: rgba(0, 0, 0, 0.9);
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
+/* Actual table styling */
+.message table {
+    width: 100%;
+    min-width: 500px;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+    background-color: transparent;
+}
+
+.message thead {
+    background: linear-gradient(135deg, #4a5568, #2d3748);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.message tbody {
+    background-color: transparent;
+}
+
+.message tr {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    transition: background-color 0.2s ease;
+}
+
+.message tr:last-child {
+    border-bottom: none;
+}
+
+.message tr:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.message th,
+.message td {
+    padding: 0.75rem;
+    text-align: left;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    vertical-align: top;
+    word-wrap: break-word;
+}
+
+.message th:last-child,
+.message td:last-child {
+    border-right: none;
+}
+
+.message th {
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.message td {
+    line-height: 1.4;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+/* Alternating row colors for better readability */
+.message tbody tr:nth-child(even) {
+    background-color: rgba(255, 255, 255, 0.03);
+}
+
+/* Links in tables */
+.message td a {
+    color: #81c784;
+    text-decoration: underline;
+}
+
+.message td a:hover {
+    color: #a5d6a7;
+    text-decoration: none;
+}
+
+/* Responsive table adjustments */
+@media (max-width: 768px) {
+    .message .markdown-table {
+        font-size: 0.75rem;
+    }
+    
+    .message .markdown-th,
+    .message .markdown-td {
+        padding: 0.5rem;
+    }
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .message {
