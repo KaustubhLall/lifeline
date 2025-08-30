@@ -14,7 +14,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ..models.chat import Conversation, Message, MessageNote, Memory, PromptDebug
-from ..serializers import MemorySerializer, MemoryCreateSerializer
+from ..serializers import MemorySerializer, MemoryCreateSerializer, MessageSerializer
 from ..utils.llm import call_llm_text, APIBudgetError, ModelNotAvailableError, LLMError
 from ..utils.memory_utils import (
     extract_and_store_memory,
@@ -378,13 +378,15 @@ class MessageListCreateView(APIView):
                     logger.info(f"[AGENT MODE] Starting agent for user: {request.user.username}")
 
                     # Call the agent utility function directly
-                    final_response = run_agent(
+                    agent_result = run_agent(
                         user=request.user,
                         conversation_id=conversation.id,
                         question=user_message,
                         model=model,  # Pass the model from the request
                         temperature=temperature,
                     )
+                    final_response = agent_result["response"]
+                    agent_metadata = agent_result["metadata"]
 
                     logger.info(f"[AGENT MODE] Agent finished with response: {final_response[:200]}...")
 
@@ -400,10 +402,16 @@ class MessageListCreateView(APIView):
                             "mode": mode,
                             "agent_framework": "run_agent",
                             "debug_entry_id": debug_entry.id,
+                            "latency_ms": agent_metadata.get("latency_ms"),
+                            "tool_calls": agent_metadata.get("tool_calls", []),
+                            "step_details": agent_metadata.get("step_details", []),
+                            "total_steps": agent_metadata.get("total_steps", 0),
+                            "total_tokens": agent_metadata.get("total_tokens", 0),
                         },
                     )
 
                     debug_entry.bot_response = bot_msg
+                    debug_entry.response_time_ms = agent_metadata.get("latency_ms")
                     debug_entry.save()
 
                     # Start background conversation memory extraction for agent mode too
@@ -418,12 +426,13 @@ class MessageListCreateView(APIView):
                     conversation.context.update({"last_bot_response": bot_msg.content})
                     conversation.save()
 
+                    user_message_serializer = MessageSerializer(user_msg)
+                    bot_message_serializer = MessageSerializer(bot_msg)
+
                     return Response(
                         {
-                            "id": bot_msg.id,
-                            "content": bot_msg.content,
-                            "created_at": bot_msg.created_at,
-                            "is_bot": bot_msg.is_bot,
+                            "user_message": user_message_serializer.data,
+                            "bot_message": bot_message_serializer.data,
                         },
                         status=status.HTTP_201_CREATED,
                     )
@@ -441,22 +450,21 @@ class MessageListCreateView(APIView):
 
             try:
                 logger.info(f"[LLM CALL] Calling LLM with model={model}, prompt_length={len(enhanced_prompt)}")
-                start_time = time.time()
 
-                bot_response = call_llm_text(enhanced_prompt, model=model)
-
-                end_time = time.time()
-                response_time_ms = int((end_time - start_time) * 1000)
+                llm_response_data = call_llm_text(enhanced_prompt, model=model)
+                bot_response_text = llm_response_data["text"]
+                usage = llm_response_data["usage"]
+                latency_ms = llm_response_data["latency_ms"]
 
                 logger.info(
-                    f"[LLM CALL] Received response - Length: {len(bot_response)} characters, Time: {response_time_ms}ms"
+                    f"[LLM CALL] Received response - Length: {len(bot_response_text)} characters, Time: {latency_ms}ms"
                 )
 
                 # Create bot message with full AI response stored
                 bot_msg = Message.objects.create(
                     conversation=conversation,
                     sender=request.user,
-                    content=bot_response,  # Store full AI response
+                    content=bot_response_text,  # Store full AI response
                     raw_user_input="",  # No raw input for bot messages
                     full_prompt="",  # No prompt for bot messages (they are responses)
                     is_bot=True,
@@ -464,12 +472,13 @@ class MessageListCreateView(APIView):
                     metadata={
                         "model": model,
                         "mode": mode,
+                        "latency_ms": latency_ms, 
+                        "token_usage": usage, 
                         "used_memories": len(all_memories),
                         "relevant_memories": len(relevant_memories),
                         "conversation_memories": len(conversation_memories),
                         "prompt_length": len(enhanced_prompt),
-                        "response_length": len(bot_response),
-                        "response_time_ms": response_time_ms,
+                        "response_length": len(bot_response_text),
                         "history_messages_included": len(message_history),
                         "debug_entry_id": debug_entry.id,
                     },
@@ -477,7 +486,10 @@ class MessageListCreateView(APIView):
 
                 # Update debug entry with response info
                 debug_entry.bot_response = bot_msg
-                debug_entry.response_time_ms = response_time_ms
+                debug_entry.response_time_ms = latency_ms
+                debug_entry.prompt_tokens = usage.get("prompt_tokens")
+                debug_entry.response_tokens = usage.get("completion_tokens")
+                debug_entry.total_tokens = usage.get("total_tokens")
                 debug_entry.save()
 
                 logger.info(
@@ -496,7 +508,7 @@ class MessageListCreateView(APIView):
                 # Update conversation context with enhanced information
                 conversation.context = {
                     "last_user_message": user_message,
-                    "last_bot_response": bot_response,
+                    "last_bot_response": bot_response_text,
                     "message_count": conversation.messages.count(),
                     "current_mode": mode,
                     "current_model": model,
@@ -518,15 +530,13 @@ class MessageListCreateView(APIView):
 
                 logger.info(f"[CONVERSATION UPDATE] Updated conversation {conversation_id} context with enhanced stats")
 
+                user_message_serializer = MessageSerializer(user_msg)
+                bot_message_serializer = MessageSerializer(bot_msg)
+
                 return Response(
                     {
-                        "id": bot_msg.id,
-                        "sender": bot_msg.sender_id,
-                        "content": bot_response,
-                        "created_at": bot_msg.created_at,
-                        "is_bot": True,
-                        "role": "assistant",
-                        "metadata": bot_msg.metadata,
+                        "user_message": user_message_serializer.data,
+                        "bot_message": bot_message_serializer.data,
                     },
                     status=status.HTTP_201_CREATED,
                 )

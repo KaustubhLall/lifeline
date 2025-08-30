@@ -1,16 +1,33 @@
-import React, {useEffect, useRef} from 'react';
+import React, {useState, useEffect, useRef} from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {Prism as SyntaxHighlighter} from 'react-syntax-highlighter';
 import {tomorrow} from 'react-syntax-highlighter/dist/esm/styles/prism';
+import MessageMetadata from './MessageMetadata';
 import '../styles/components/ChatWindow.css';
 
 function ChatWindow({messages, username}) {
     const bottomRef = useRef(null);
+    const [visibleMetadataId, setVisibleMetadataId] = useState(null);
+    const [renderTrigger, setRenderTrigger] = useState(0);
 
     useEffect(() => {
         bottomRef.current?.scrollIntoView({behavior: 'smooth'});
     }, [messages]);
+
+    // Force re-render when new messages arrive - especially with metadata
+    useEffect(() => {
+        // Trigger re-render after a short delay to ensure metadata is processed
+        const timer = setTimeout(() => {
+            setRenderTrigger(prev => prev + 1);
+        }, 100);
+        
+        return () => clearTimeout(timer);
+    }, [messages]);
+
+    const toggleMetadata = (messageId) => {
+        setVisibleMetadataId(prevId => (prevId === messageId ? null : messageId));
+    };
 
     const formatTime = (timestamp) => {
         if (!timestamp) return '';
@@ -98,8 +115,8 @@ function ChatWindow({messages, username}) {
 
     return (
         <div className="chat-window">
-            {messages.map(msg => (
-                <div key={msg.id} className="message-container">
+            {messages.map((msg, index) => (
+                <div key={`${msg.id}-${msg.metadata ? Object.keys(msg.metadata).length : 0}-${renderTrigger}`} className="message-container">
                     <div className={`message-header ${!msg.is_bot ? 'user' : 'bot'}`}>
                         <div className="message-sender">
                             {!msg.is_bot ? (
@@ -115,7 +132,21 @@ function ChatWindow({messages, username}) {
                             )}
                         </div>
                         <span className="message-timestamp">{formatTime(msg.created_at)}</span>
+                        {msg.is_bot && (
+                            <button className="metadata-toggle-btn-small" onClick={() => toggleMetadata(msg.id)}>
+                                <i className={`bi ${visibleMetadataId === msg.id ? 'bi-chevron-up' : 'bi-info-circle'}`}></i>
+                            </button>
+                        )}
+                        {/* Debug: Show metadata status */}
+                        {process.env.NODE_ENV === 'development' && msg.is_bot && (
+                            <span style={{fontSize: '0.6rem', color: '#666', marginLeft: '4px'}}>
+                                {msg.metadata ? `✓(${Object.keys(msg.metadata).length})` : '✗'}
+                            </span>
+                        )}
                     </div>
+                    {visibleMetadataId === msg.id && (
+                        <MessageMetadata metadata={msg.metadata || {}} />
+                    )}
                     <div className={`message-content ${!msg.is_bot ? 'user-content' : 'bot-content'}`}>
                         <div
                             className={`message ${!msg.is_bot ? 'user' : 'bot'} ${msg.pending ? 'pending' : ''} ${msg.error ? 'error' : ''}`}>
