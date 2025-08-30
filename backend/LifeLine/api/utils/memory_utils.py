@@ -6,7 +6,7 @@ from django.db import models
 from django.utils import timezone
 
 from ..models.chat import Memory, Message, Conversation
-from ..utils.llm import call_llm_embedding, call_llm_memory_extraction
+from ..utils.llm import call_llm_embedding, call_llm_memory_extraction, call_llm_conversation_memory_extraction
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +18,94 @@ def cosine_similarity(a: List[float], b: List[float]) -> float:
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
 
+def extract_and_store_conversation_memory(user_message: Message, ai_message: Message, user) -> Optional[Memory]:
+    """
+    Extract memory from a conversation pair (user question + AI response) and store it if found.
+    Focuses on actionable items, deadlines, and important context with clear dates.
+
+    Args:
+        user_message: The user's message
+        ai_message: The AI's response message
+        user: The user who sent the message
+
+    Returns:
+        Memory object if memory was extracted, None otherwise
+    """
+    try:
+        logger.info(f"[CONVERSATION MEMORY] Starting extraction for conversation pair: user msg {user_message.id} + AI msg {ai_message.id}")
+
+        # Extract memory using conversation pair LLM function
+        from datetime import datetime
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        
+        memory_data = call_llm_conversation_memory_extraction(
+            user_message=user_message.content,
+            ai_response=ai_message.content,
+            current_date=current_date
+        )
+
+        if not memory_data.get("has_memory", False):
+            logger.info(f"[CONVERSATION MEMORY] No extractable memory found in conversation pair")
+            return None
+
+        # Generate embedding for the memory content
+        logger.debug(f"[CONVERSATION MEMORY] Generating embedding for memory content")
+        embedding = call_llm_embedding(memory_data["content"])
+
+        # Enhanced metadata for conversation-based memories
+        metadata = {
+            "extraction_model": "gpt-4o-mini",
+            "extracted_at": str(timezone.now()),
+            "extraction_date": current_date,
+            "source_user_message_id": user_message.id,
+            "source_ai_message_id": ai_message.id,
+            "user_message_length": len(user_message.content),
+            "ai_message_length": len(ai_message.content),
+            "embedding_dimensions": len(embedding) if embedding else 0,
+            "has_deadline": memory_data.get("has_deadline", False),
+            "deadline_date": memory_data.get("deadline_date"),
+            "is_actionable": memory_data.get("is_actionable", False),
+        }
+
+        # Add deadline to tags if present
+        tags = memory_data.get("tags", [])
+        if memory_data.get("deadline_date"):
+            tags.append(f"deadline:{memory_data['deadline_date']}")
+        if memory_data.get("is_actionable"):
+            tags.append("actionable")
+
+        # Create memory object
+        memory = Memory.objects.create(
+            user=user,
+            content=memory_data["content"],
+            title=memory_data.get("title", ""),
+            memory_type=memory_data.get("memory_type", "personal"),
+            tags=tags,
+            importance_score=memory_data.get("importance_score", 0.5),
+            embedding=embedding,
+            source_message=ai_message,  # Use AI message as source since it contains the actionable info
+            source_conversation=user_message.conversation,
+            is_auto_extracted=True,
+            extraction_confidence=memory_data.get("confidence", 0.0),
+            metadata=metadata,
+        )
+
+        logger.info(
+            f"[CONVERSATION MEMORY] Successfully extracted and stored memory {memory.id} "
+            f"(type: {memory.memory_type}, importance: {memory.importance_score}, "
+            f"actionable: {memory_data.get('is_actionable')}, deadline: {memory_data.get('deadline_date')})"
+        )
+        return memory
+
+    except Exception as e:
+        logger.error(f"[CONVERSATION MEMORY] Failed to extract memory from conversation pair: {str(e)}")
+        return None
+
+
 def extract_and_store_memory(message: Message, user) -> Optional[Memory]:
     """
-    Extract memory from a message and store it if found.
+    Extract memory from a single message and store it if found.
+    NOTE: Consider using extract_and_store_conversation_memory for better context.
 
     Args:
         message: The message to analyze
@@ -30,7 +115,7 @@ def extract_and_store_memory(message: Message, user) -> Optional[Memory]:
         Memory object if memory was extracted, None otherwise
     """
     try:
-        logger.info(f"[MEMORY EXTRACTION] Starting extraction for message {message.id} from user {user.username}")
+        logger.info(f"[MEMORY EXTRACTION] Starting extraction for single message {message.id} from user {user.username}")
 
         # Extract memory using LLM
         memory_data = call_llm_memory_extraction(message.content)

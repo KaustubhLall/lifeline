@@ -18,6 +18,7 @@ from ..serializers import MemorySerializer, MemoryCreateSerializer
 from ..utils.llm import call_llm_text, APIBudgetError, ModelNotAvailableError, LLMError
 from ..utils.memory_utils import (
     extract_and_store_memory,
+    extract_and_store_conversation_memory,
     get_relevant_memories,
     generate_memory_context,
     get_conversation_memories,
@@ -45,8 +46,22 @@ def _log_request_info(request, action, **kwargs):
     logger.info(f"{action} - {user_info} from {client_ip} - {kwargs}")
 
 
+def async_conversation_memory_extraction(user_message_id, ai_message_id, user_id):
+    """Background task to extract memory from a conversation pair (user + AI messages)."""
+    try:
+        user_message = Message.objects.get(id=user_message_id)
+        ai_message = Message.objects.get(id=ai_message_id)
+        user = User.objects.get(id=user_id)
+
+        # Call the conversation-pair memory extraction function
+        extract_and_store_conversation_memory(user_message, ai_message, user)
+
+    except Exception as e:
+        logger.error(f"Background conversation memory extraction failed for messages {user_message_id}, {ai_message_id}: {str(e)}")
+
+
 def async_memory_extraction(message_id, user_id):
-    """Background task to extract memory from a message."""
+    """Background task to extract memory from a single message (legacy - consider using conversation pairs)."""
     try:
         message = Message.objects.get(id=message_id)
         user = User.objects.get(id=user_id)
@@ -321,10 +336,8 @@ class MessageListCreateView(APIView):
                 f"Created user message {user_msg.id} with full prompt ({len(enhanced_prompt)} chars) in conversation {conversation_id}"
             )
 
-            # Start background memory extraction
-            memory_thread = Thread(target=async_memory_extraction, args=(user_msg.id, request.user.id))
-            memory_thread.daemon = True
-            memory_thread.start()
+            # Note: Memory extraction will be triggered after bot response is created
+            # to capture the full conversation pair for better context
 
             # Prepare debug information BEFORE creating debug entry
             system_prompt = get_system_prompt(mode)
@@ -392,6 +405,15 @@ class MessageListCreateView(APIView):
 
                     debug_entry.bot_response = bot_msg
                     debug_entry.save()
+
+                    # Start background conversation memory extraction for agent mode too
+                    memory_thread = Thread(
+                        target=async_conversation_memory_extraction, 
+                        args=(user_msg.id, bot_msg.id, request.user.id)
+                    )
+                    memory_thread.daemon = True
+                    memory_thread.start()
+                    logger.info(f"[AGENT CONVERSATION MEMORY] Started background extraction for agent message pair {user_msg.id} + {bot_msg.id}")
 
                     conversation.context.update({"last_bot_response": bot_msg.content})
                     conversation.save()
@@ -461,6 +483,15 @@ class MessageListCreateView(APIView):
                 logger.info(
                     f"[MESSAGE CREATION] Created bot message {bot_msg.id} with full response and debug entry {debug_entry.id}"
                 )
+
+                # Start background conversation memory extraction with user + AI message pair
+                memory_thread = Thread(
+                    target=async_conversation_memory_extraction, 
+                    args=(user_msg.id, bot_msg.id, request.user.id)
+                )
+                memory_thread.daemon = True
+                memory_thread.start()
+                logger.info(f"[CONVERSATION MEMORY] Started background extraction for message pair {user_msg.id} + {bot_msg.id}")
 
                 # Update conversation context with enhanced information
                 conversation.context = {

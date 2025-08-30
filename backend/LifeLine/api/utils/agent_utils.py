@@ -9,6 +9,7 @@ from langgraph.prebuilt import ToolNode
 from django.contrib.auth import get_user_model
 
 from .connectors.gmail.gmail_agent_tool import GmailAgentTool
+from .prompts import get_system_prompt
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -20,7 +21,7 @@ class AgentState(TypedDict):
 
 def run_agent(user: User, conversation_id: int, question: str, model: str = "gpt-4o-mini", temperature: float = 0.2) -> str:
     """
-    Pure LangGraph agent implementation for Gmail operations.
+    Pure LangGraph agent implementation for Gmail operations with enhanced prompt system.
     
     Args:
         user: Django User instance
@@ -38,6 +39,13 @@ def run_agent(user: User, conversation_id: int, question: str, model: str = "gpt
         # Initialize Gmail tool and get its tools
         gmail_tool = GmailAgentTool(user_id=user.id)
         tools = gmail_tool.get_tools()
+        
+        # Get the agent system prompt
+        agent_system_prompt = get_system_prompt("agent")
+        user_context = f"\n\nUser: {user.first_name or user.username}"
+        full_system_prompt = agent_system_prompt + user_context
+        
+        logger.info(f"[LangGraph Agent] Using agent system prompt: {len(full_system_prompt)} chars")
         
         # Set up LLM with tools
         llm = ChatOpenAI(model=model, temperature=temperature)
@@ -62,9 +70,17 @@ def run_agent(user: User, conversation_id: int, question: str, model: str = "gpt
         workflow.add_conditional_edges("agent", should_continue, {"tools": "tools", "end": END})
         workflow.add_edge("tools", "agent")
         
-        # Compile and run
+        # Compile and run with proper system prompt
         app = workflow.compile()
-        inputs = {"messages": [HumanMessage(content=question)]}
+        
+        # Create messages with system prompt and user question
+        from langchain_core.messages import SystemMessage
+        inputs = {
+            "messages": [
+                SystemMessage(content=full_system_prompt),
+                HumanMessage(content=question)
+            ]
+        }
         
         final_response = None
         for output in app.stream(inputs):

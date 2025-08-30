@@ -6,22 +6,32 @@ logger = logging.getLogger(__name__)
 
 # Base system prompts for different modes
 SYSTEM_PROMPTS = {
-    "conversational": """You are LifeLine, a helpful and empathetic AI assistant that remembers important details about users.
-You maintain context across conversations and build meaningful relationships by recalling personal information, preferences, and past discussions.
+    "conversational": """You are LifeLine, a smart AI assistant that knows the user well and provides helpful, contextual responses.
 
-Your personality:
-- Warm, friendly, and genuinely interested in the user's wellbeing
-- Thoughtful and considerate in responses
-- Able to reference past conversations naturally
-- Supportive but not overly familiar unless the relationship has developed
-- Professional yet personable
+Core Principles:
+- Be concise but warm - no unnecessary verbosity
+- Use memories naturally without explicitly stating "I remember"
+- Infer context from past conversations and user patterns
+- Provide direct answers first, then elaborate if needed
+- Adapt to the user's communication style and preferences
 
-Guidelines:
-- Use memories to personalize responses and show continuity
-- Reference past conversations when relevant
-- Ask follow-up questions based on previous discussions
-- Be genuinely helpful while maintaining appropriate boundaries
-- Adapt your communication style to match the user's preferences over time""",
+Memory Usage:
+- Seamlessly integrate what you know about the user
+- Reference past topics, preferences, and goals naturally
+- Build on previous conversations without over-explaining
+- Use context to provide more relevant, personalized responses
+
+Response Style:
+- Direct and helpful, not chatty
+- Use markdown for clarity (headers, lists, emphasis)
+- Anticipate follow-up needs
+- Be proactive with suggestions based on user patterns
+
+Example approach:
+- Instead of: "I remember you mentioned you like coffee. Would you like me to help you find coffee shops?"
+- Say: "Here are some highly-rated coffee shops near your office in downtown SD."
+
+Be smart, contextual, and efficient.""",
     "coaching": """You are LifeLine, an AI life coach focused on helping users achieve their personal and professional goals.
 You remember their goals, progress, challenges, and breakthroughs to provide continuous, personalized guidance.
 
@@ -101,45 +111,54 @@ Use memories to:
 - Remember past creative challenges and breakthroughs
 - Maintain context on artistic goals and aspirations
 - Reference previous creative work and feedback""",
-    "agent": """You are LifeLine, an AI assistant that IMMEDIATELY takes action on email requests. NO QUESTIONS. Just do what the user asks.
+    "agent": """You are LifeLine, a smart AI assistant that takes immediate action while being conversational and helpful.
 
-CRITICAL RULES:
-- NEVER ask "Do you want me to..." - just do it
-- NEVER ask for clarification on simple requests
-- NEVER list options - pick the most obvious one and act
-- When user says "summarize emails" → immediately search and summarize
-- When user says "send email to X" → immediately send it
-- When user says "find actionable items" → immediately search and list them
+Core Behavior:
+- Act first, explain briefly after
+- Use context and memories to understand intent
+- Be concise but friendly
+- Infer reasonable defaults instead of asking obvious questions
+- Reference what you remember about the user naturally
 
-EMAIL ACTIONS:
-- "summarize my emails" = search_emails(query="newer_than:1d", max_results=25) then summarize
-- "last day emails" = search_emails(query="newer_than:1d", max_results=50) 
-- "actionable items" = search_emails(query="is:unread OR newer_than:2d", max_results=50) then identify tasks/deadlines
-- "send email to [email]" = send_email immediately with basic subject/body
+For Email Requests:
+- "summarize emails" → search recent emails (1-2 days) and provide clean summary
+- "actionable items" → find emails with tasks/deadlines and create markdown table
+- "send email" → compose and send with reasonable subject/content
+- "search for X" → search emails and summarize findings
 
-OUTPUT FORMAT:
-• **Subject** - From: Sender - Brief summary (Action needed: X)
-• **Subject** - From: Sender - Brief summary (Deadline: X)
+Response Style:
+- Lead with action, follow with brief context
+- Use markdown for structure (tables, lists, headers)
+- Reference user's name and preferences when known
+- Keep responses focused and scannable
 
-STOP ASKING QUESTIONS. START TAKING ACTION.
-""",
+Example:
+"Found 12 recent emails. Here's your summary:
+
+**High Priority:**
+• Meeting request from Sarah - needs response by Friday
+• Invoice #1234 due tomorrow
+
+**Updates:**
+• Project Alpha status update
+• Newsletter from TechCrunch"
+
+Be proactive, contextual, and efficient.""",
 }
 
-# Memory integration templates
+# Memory integration templates - more natural and concise
 MEMORY_CONTEXT_TEMPLATES = {
-    "personal_context": """## What I Remember About You:
+    "personal_context": """{memories}
+""",
+    "goal_tracking": """Current goals and progress:
 {memories}
 
 """,
-    "goal_tracking": """## Your Goals & Progress:
+    "ongoing_situations": """Context from recent conversations:
 {memories}
 
 """,
-    "ongoing_situations": """## Ongoing Situations We've Discussed:
-{memories}
-
-""",
-    "preferences_learned": """## Your Preferences & Style:
+    "preferences_learned": """User preferences:
 {memories}
 
 """,
@@ -167,7 +186,7 @@ def get_system_prompt(mode: str = "conversational") -> str:
 
 def format_memory_context(memories: List[Dict], context_type: str = "personal_context") -> str:
     """
-    Format memories into a context string for the prompt.
+    Format memories into a concise, natural context string for the prompt.
 
     Args:
         memories: List of memory dictionaries with content, title, etc.
@@ -180,42 +199,41 @@ def format_memory_context(memories: List[Dict], context_type: str = "personal_co
         return ""
 
     try:
-        # Group memories by type for better organization
-        memory_groups = {}
-        for memory in memories:
-            mem_type = memory.get("memory_type", "personal")
-            if mem_type not in memory_groups:
-                memory_groups[mem_type] = []
-            memory_groups[mem_type].append(memory)
-
-        # Format memories with better structure
+        # Create a more natural, concise memory summary
         formatted_memories = []
-
-        for mem_type, mem_list in memory_groups.items():
-            if mem_type == "goal":
-                formatted_memories.append("### Goals & Objectives:")
-            elif mem_type == "preference":
-                formatted_memories.append("### Personal Preferences:")
-            elif mem_type == "relationship":
-                formatted_memories.append("### Relationships & People:")
-            elif mem_type == "experience":
-                formatted_memories.append("### Important Experiences:")
+        
+        # Sort memories by importance and recency
+        sorted_memories = sorted(memories, 
+                               key=lambda x: (x.get("importance_score", 0.5), 
+                                             x.get("created_at", "")), 
+                               reverse=True)
+        
+        # Group similar memories and create concise summaries
+        for memory in sorted_memories[:8]:  # Limit to top 8 most relevant
+            content = memory.get("content", "").strip()
+            title = memory.get("title", "").strip()
+            
+            # Create concise memory entry
+            if title and len(title) < 50:
+                memory_text = f"{title}: {content}"
             else:
-                formatted_memories.append("### Personal Information:")
+                memory_text = content
+            
+            # Keep it concise - max 100 chars per memory
+            if len(memory_text) > 100:
+                memory_text = memory_text[:97] + "..."
+                
+            formatted_memories.append(memory_text)
 
-            for memory in mem_list:
-                title = memory.get("title", "").strip()
-                content = memory.get("content", "").strip()
-
-                if title and title.lower() not in content.lower():
-                    formatted_memories.append(f"- **{title}**: {content}")
-                else:
-                    formatted_memories.append(f"- {content}")
-
-        memory_text = "\n".join(formatted_memories)
+        # Join memories naturally
+        if formatted_memories:
+            memory_text = "\n".join([f"• {mem}" for mem in formatted_memories])
+        else:
+            memory_text = "No specific context available."
+            
         template = MEMORY_CONTEXT_TEMPLATES.get(context_type, MEMORY_CONTEXT_TEMPLATES["personal_context"])
 
-        logger.info(f"Formatted {len(memories)} memories into {context_type} context")
+        logger.info(f"Formatted {len(memories)} memories into concise {context_type} context")
         return template.format(memories=memory_text)
 
     except Exception as e:
@@ -311,10 +329,10 @@ def build_enhanced_prompt(
     conversation_history: List[Dict] = None,
     current_message: str = "",
     user_name: str = "",
-    max_history_tokens: int = 10000,
+    max_history_tokens: int = 6000,  # Reduced for more concise prompts
 ) -> str:
     """
-    Build a comprehensive prompt with system instructions, memories, and conversation context.
+    Build a concise, contextual prompt with system instructions, memories, and conversation context.
 
     Args:
         mode: Chat mode (conversational, coaching, etc.)
@@ -330,33 +348,44 @@ def build_enhanced_prompt(
     try:
         prompt_parts = []
 
-        # 1. System prompt
+        # 1. System prompt with user context
         system_prompt = get_system_prompt(mode)
         if user_name:
-            system_prompt += f"\n\nYou are speaking with {user_name}."
+            system_prompt += f"\n\nUser: {user_name}"
+        
+        # 2. Integrate memory context naturally into system prompt
+        if memories and len(memories) > 0:
+            memory_context = format_memory_context(memories, "personal_context")
+            if memory_context.strip():
+                system_prompt += f"\n\nContext about {user_name or 'the user'}:\n{memory_context}"
+        
         prompt_parts.append(system_prompt)
 
-        # 2. Memory context
-        if memories:
-            memory_context = format_memory_context(memories, "personal_context")
-            if memory_context:
-                prompt_parts.append(memory_context)
-
-        # 3. Conversation history
-        if conversation_history:
-            history_context = format_conversation_history(conversation_history, max_history_tokens)
-            if history_context:
-                template = CONVERSATION_TEMPLATES["recent_context"]
-                prompt_parts.append(template.format(conversation_history=history_context))
+        # 3. Recent conversation history (more concise)
+        if conversation_history and len(conversation_history) > 0:
+            # Only include last few messages for immediate context
+            recent_messages = conversation_history[-6:] if len(conversation_history) > 6 else conversation_history
+            history_parts = []
+            
+            for msg in recent_messages:
+                role = "User" if msg.get("role") == "user" else "Assistant"
+                content = msg.get("content", "").strip()
+                if content and len(content) < 200:  # Keep messages concise
+                    history_parts.append(f"{role}: {content}")
+                elif content:
+                    history_parts.append(f"{role}: {content[:150]}...")
+            
+            if history_parts:
+                prompt_parts.append("\nRecent conversation:\n" + "\n".join(history_parts))
 
         # 4. Current message
         if current_message:
-            prompt_parts.append(f"User: {current_message}")
+            prompt_parts.append(f"\nUser: {current_message}")
 
         full_prompt = "\n".join(prompt_parts)
 
         logger.info(
-            f"Built enhanced prompt: mode={mode}, memories={len(memories) if memories else 0}, "
+            f"Built concise prompt: mode={mode}, memories={len(memories) if memories else 0}, "
             f"history_messages={len(conversation_history) if conversation_history else 0}, "
             f"total_length={len(full_prompt)}"
         )

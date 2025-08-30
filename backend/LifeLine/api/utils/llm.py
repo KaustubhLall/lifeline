@@ -265,6 +265,97 @@ def call_llm_embedding(text: str, model: str = "text-embedding-3-small") -> list
         raise LLMError(f"Failed to generate embedding: {e}")
 
 
+def call_llm_conversation_memory_extraction(user_message: str, ai_response: str, current_date: str = None, model: str = "gpt-4o-mini") -> dict:
+    """
+    Extract memorable information from a conversation pair (user question + AI response).
+    Focuses on actionable items, deadlines, and important context with clear dates.
+
+    Args:
+        user_message: The user's message/question
+        ai_response: The AI's response
+        current_date: Current date for context (YYYY-MM-DD format)
+        model: The model to use for extraction
+
+    Returns:
+        Dict containing extracted memory information or None if no memory found
+
+    Raises:
+        LLMError: If memory extraction fails
+    """
+    from datetime import datetime
+    if not current_date:
+        current_date = datetime.now().strftime("%Y-%m-%d")
+    
+    _log_call_info("call_llm_conversation_memory_extraction", model=model, 
+                   content_length=len(user_message) + len(ai_response))
+
+    extraction_prompt = f"""
+Analyze this conversation pair and extract memorable information, focusing on actionable items and important context.
+
+Current date: {current_date}
+
+User: {user_message}
+AI: {ai_response}
+
+Look for:
+- Actionable items, tasks, or deadlines mentioned in the AI response
+- Important personal information revealed in the conversation
+- Goals, preferences, or decisions made
+- Scheduled events, meetings, or commitments
+- Key insights or important facts that should be remembered
+
+Prioritize memories that:
+1. Have clear actionable items with dates/deadlines
+2. Contain important personal context
+3. Include decisions or commitments made
+4. Reference future events or scheduled items
+
+If you find memorable information, respond with a JSON object:
+{{
+    "has_memory": true,
+    "title": "Brief, clear title (include date if relevant)",
+    "content": "The memorable information with full context and dates",
+    "memory_type": "actionable|personal|preference|goal|event|decision",
+    "importance_score": 0.0-1.0,
+    "tags": ["relevant", "tags", "dates"],
+    "confidence": 0.0-1.0,
+    "has_deadline": true/false,
+    "deadline_date": "YYYY-MM-DD" or null,
+    "is_actionable": true/false
+}}
+
+If no memorable information is found, respond with:
+{{
+    "has_memory": false
+}}
+
+Only extract memories that would be genuinely useful to remember later.
+"""
+
+    try:
+        logger.info(f"Extracting memory from conversation pair - User: {len(user_message)} chars, AI: {len(ai_response)} chars")
+
+        response = call_llm_text(extraction_prompt, model=model, temperature=0.1)
+
+        # Try to parse the JSON response
+        import json
+
+        try:
+            memory_data = json.loads(response)
+            logger.info(f"Conversation memory extraction successful - Has memory: {memory_data.get('has_memory', False)}")
+            if memory_data.get('has_memory'):
+                logger.info(f"Memory type: {memory_data.get('memory_type')}, Actionable: {memory_data.get('is_actionable')}, Deadline: {memory_data.get('deadline_date')}")
+            return memory_data
+        except json.JSONDecodeError:
+            logger.warning(f"Failed to parse conversation memory extraction response as JSON: {response}")
+            return {"has_memory": False}
+
+    except Exception as e:
+        logger.error(f"Conversation memory extraction failed: {e}")
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        raise LLMError(f"Failed to extract conversation memory: {e}")
+
+
 def call_llm_memory_extraction(message_content: str, model: str = "gpt-4o-mini") -> dict:
     """
     Extract memorable information from a message using LLM.
@@ -311,7 +402,7 @@ def call_llm_memory_extraction(message_content: str, model: str = "gpt-4o-mini")
     """
 
     try:
-        logger.info(f"Extracting memory from message - Length: {len(message_content)} chars")
+        logger.info(f"Extracting memory from single message - Length: {len(message_content)} chars (Consider using conversation pair extraction instead)")
 
         response = call_llm_text(extraction_prompt, model=model, temperature=0.1)
 
