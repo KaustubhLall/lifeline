@@ -35,9 +35,9 @@ def run_agent(user: User, conversation_id: int, question: str, model: str = "gpt
     logger.info(f"[LangGraph Agent] Starting for user {user.username}")
     
     try:
-        # Initialize Gmail tool
+        # Initialize Gmail tool and get its tools
         gmail_tool = GmailAgentTool(user_id=user.id)
-        tools = [gmail_tool]
+        tools = gmail_tool.get_tools()
         
         # Set up LLM with tools
         llm = ChatOpenAI(model=model, temperature=temperature)
@@ -68,8 +68,29 @@ def run_agent(user: User, conversation_id: int, question: str, model: str = "gpt
         
         final_response = None
         for output in app.stream(inputs):
+            logger.info(f"[LangGraph Agent] Stream output keys: {list(output.keys())}")
+            for key, value in output.items():
+                if "messages" in value:
+                    last_message = value["messages"][-1]
+                    logger.info(f"[LangGraph Agent] Node '{key}' message type: {type(last_message).__name__}")
+                    if hasattr(last_message, 'content'):
+                        logger.info(f"[LangGraph Agent] Node '{key}' content: {last_message.content[:200]}...")
+                    if hasattr(last_message, 'tool_calls'):
+                        logger.info(f"[LangGraph Agent] Node '{key}' tool calls: {last_message.tool_calls}")
+                    
+                    # Capture the final AI response (when agent node has no tool calls)
+                    if (key == "agent" and 
+                        hasattr(last_message, 'tool_calls') and 
+                        not last_message.tool_calls and 
+                        hasattr(last_message, 'content') and 
+                        last_message.content):
+                        final_response = last_message.content
+                        logger.info(f"[LangGraph Agent] Captured final response from agent node")
+            
+            # Also check for __end__ pattern
             if "__end__" in output:
                 final_response = output["__end__"]["messages"][-1].content
+                logger.info(f"[LangGraph Agent] Captured final response from __end__ node")
                 break
         
         if final_response is None:
