@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import '../styles/App.css';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import Login from '../components/Login';
@@ -18,8 +18,14 @@ function App() {
     const [showSignup, setShowSignup] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [input, setInput] = useState('');
-    const [selectedModel, setSelectedModel] = useState('gpt-4.1-nano');
-    const [chatMode, setChatMode] = useState('conversational');
+    const [selectedModel, setSelectedModel] = useState('gpt-5-mini-2025-08-07');
+    const [chatMode, setChatMode] = useState(localStorage.getItem('chatMode') || 'agent');
+    const [temperature, setTemperature] = useState(0.2);
+
+    // Persist chat mode selection
+    useEffect(() => {
+        localStorage.setItem('chatMode', chatMode);
+    }, [chatMode]);
 
     // Authentication and user info
     const {authenticated, userId, username, handleLogin, handleLogout} = useAuth();
@@ -58,6 +64,7 @@ function App() {
 
     // Available AI models and chat modes
     const models = [
+        {value: 'gpt-5-mini-2025-08-07', label: 'GPT-5 Mini (2025-08-07)'},
         {value: 'gpt-4.1-nano', label: 'GPT-4.1 Nano'},
         {value: 'gpt-4o', label: 'GPT-4o'},
         {value: 'gpt-4o-mini', label: 'GPT-4o Mini'},
@@ -66,7 +73,8 @@ function App() {
 
     const chatModes = [
         {value: 'conversational', label: 'Conversational'},
-        {value: 'coaching', label: 'Coaching'}
+        {value: 'coaching', label: 'Coaching'},
+        {value: 'agent', label: 'Agent'}
     ];
 
     // Consolidate errors from hooks
@@ -111,7 +119,7 @@ function App() {
     const handleSend = async () => {
         if (!input.trim() || !currentId) return;
 
-        await sendMessage(input, selectedModel, chatMode, userId);
+        await sendMessage(input, selectedModel, chatMode, userId, temperature);
         setInput('');
     };
 
@@ -142,11 +150,13 @@ function App() {
 
             {/* User Settings Modal */}
             {showSettings && (
-                <UserSettings
-                    onClose={handleCloseSettings}
-                    username={username}
-                    userId={userId}
-                />
+                <div className="settings-overlay" onClick={handleCloseSettings}>
+                    <UserSettings
+                        onClose={handleCloseSettings}
+                        username={username}
+                        userId={userId}
+                    />
+                </div>
             )}
 
             {/* Application header with controls */}

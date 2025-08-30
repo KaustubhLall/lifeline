@@ -89,7 +89,7 @@ export function useConversations(authenticated, onLogout) {
     }, []);
 
     // Send message optimistically; append bot response on success
-    const sendMessage = useCallback(async (content, selectedModel, chatMode, userId) => {
+    const sendMessage = useCallback(async (content, selectedModel, chatMode, userId, temperature) => {
         if (!content.trim() || !currentId) return;
 
         const tempId = Date.now();
@@ -111,7 +111,8 @@ export function useConversations(authenticated, onLogout) {
                 body: JSON.stringify({
                     content: userMessage.content,
                     model: selectedModel,
-                    mode: chatMode
+                    mode: chatMode,
+                    temperature: temperature // Pass temperature to the backend
                 })
             });
 

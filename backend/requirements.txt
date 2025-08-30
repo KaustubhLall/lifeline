@@ -2,14 +2,20 @@
 # server
 django
 djangorestframework
+djangorestframework-simplejwt
 django-cors-headers
 gunicorn
+psycopg2-binary
 
 # ai
 openai
 langchain
 langgraph
+langchain-openai
 tiktoken
+langchain-mcp-adapters
+mcp
+dotenv
 
 # comms
 twilio

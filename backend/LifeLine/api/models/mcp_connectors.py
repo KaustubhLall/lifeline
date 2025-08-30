@@ -1,6 +1,8 @@
 from django.contrib.auth import get_user_model
 from django.db import models
 from django.utils import timezone
+import json
+import datetime
 
 User = get_user_model()
 
@@ -36,6 +38,10 @@ class MCPConnector(models.Model):
 
     # Configuration and settings
     config = models.JSONField(default=dict, help_text="Connector-specific configuration")
+    # New credential storage (DB instead of filesystem-only)
+    credentials_data = models.JSONField(blank=True, null=True, help_text="OAuth credential payload")
+    token_expiry = models.DateTimeField(blank=True, null=True, help_text="Access token expiry")
+    has_refresh_token = models.BooleanField(default=False)
 
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)
@@ -67,6 +73,37 @@ class MCPConnector(models.Model):
         if error_message:
             self.config["last_error"] = error_message
         self.save(update_fields=["status", "config"])
+
+    def store_credentials(self, credentials):
+        """Persist google.oauth2.credentials.Credentials in DB fields."""
+        try:
+            data = json.loads(credentials.to_json())
+        except Exception:
+            data = {}
+        self.credentials_data = data
+        # Expiry may be in credentials.expiry
+        expiry = getattr(credentials, "expiry", None)
+        if expiry:
+            # Ensure timezone-aware
+            if timezone.is_naive(expiry):
+                expiry = timezone.make_aware(expiry, datetime.timezone.utc)
+            self.token_expiry = expiry
+        self.has_refresh_token = bool(getattr(credentials, "refresh_token", None))
+        self.mark_as_authenticated()
+        self.save(
+            update_fields=["credentials_data", "token_expiry", "has_refresh_token", "status", "last_authenticated"]
+        )
+
+    def load_credentials(self):
+        """Return google.oauth2.credentials.Credentials or None."""
+        from google.oauth2.credentials import Credentials
+
+        if not self.credentials_data:
+            return None
+        try:
+            return Credentials.from_authorized_user_info(self.credentials_data, scopes=self.scopes or [])
+        except Exception:
+            return None
 
 
 class MCPOperation(models.Model):

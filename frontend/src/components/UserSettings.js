@@ -409,10 +409,10 @@ function UserSettings({onClose, username}) {
     );
 
     return (
-        <div className="user-settings-modal">
+        <div className="user-settings-modal" onClick={(e) => e.stopPropagation()}>
             <div className="user-settings-header">
                 <h2>User Settings</h2>
-                <button onClick={onClose} className="close-button">×</button>
+                <button onClick={onClose} className="close-btn">×</button>
             </div>
             <div className="user-settings-body">
                 <div className="user-settings-tabs">

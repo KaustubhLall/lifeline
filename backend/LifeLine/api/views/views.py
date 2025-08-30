@@ -18,11 +18,13 @@ from ..serializers import MemorySerializer, MemoryCreateSerializer
 from ..utils.llm import call_llm_text, APIBudgetError, ModelNotAvailableError, LLMError
 from ..utils.memory_utils import (
     extract_and_store_memory,
+    extract_and_store_conversation_memory,
     get_relevant_memories,
     generate_memory_context,
     get_conversation_memories,
 )
 from ..utils.prompts import build_enhanced_prompt, get_system_prompt, validate_mode
+from ..utils.agent_utils import run_agent
 
 # Configure logging with filename and line numbers
 logging.basicConfig(
@@ -44,8 +46,22 @@ def _log_request_info(request, action, **kwargs):
     logger.info(f"{action} - {user_info} from {client_ip} - {kwargs}")
 
 
+def async_conversation_memory_extraction(user_message_id, ai_message_id, user_id):
+    """Background task to extract memory from a conversation pair (user + AI messages)."""
+    try:
+        user_message = Message.objects.get(id=user_message_id)
+        ai_message = Message.objects.get(id=ai_message_id)
+        user = User.objects.get(id=user_id)
+
+        # Call the conversation-pair memory extraction function
+        extract_and_store_conversation_memory(user_message, ai_message, user)
+
+    except Exception as e:
+        logger.error(f"Background conversation memory extraction failed for messages {user_message_id}, {ai_message_id}: {str(e)}")
+
+
 def async_memory_extraction(message_id, user_id):
-    """Background task to extract memory from a message."""
+    """Background task to extract memory from a single message (legacy - consider using conversation pairs)."""
     try:
         message = Message.objects.get(id=message_id)
         user = User.objects.get(id=user_id)
@@ -218,9 +234,10 @@ class MessageListCreateView(APIView):
             user_message = request.data.get("content")
             model = request.data.get("model", "gpt-4.1-nano")
             mode = request.data.get("mode", "conversational")
+            temperature = request.data.get("temperature", 0.2)
 
             logger.info(
-                f"Processing message for conversation {conversation_id} - User: {request.user.username}, Model: {model}, Mode: {mode}, Length: {len(user_message) if user_message else 0}"
+                f"Processing message for conversation {conversation_id} - User: {request.user.username}, Model: {model}, Mode: {mode}, Temp: {temperature}, Length: {len(user_message) if user_message else 0}"
             )
 
             if not user_message:
@@ -319,10 +336,8 @@ class MessageListCreateView(APIView):
                 f"Created user message {user_msg.id} with full prompt ({len(enhanced_prompt)} chars) in conversation {conversation_id}"
             )
 
-            # Start background memory extraction
-            memory_thread = Thread(target=async_memory_extraction, args=(user_msg.id, request.user.id))
-            memory_thread.daemon = True
-            memory_thread.start()
+            # Note: Memory extraction will be triggered after bot response is created
+            # to capture the full conversation pair for better context
 
             # Prepare debug information BEFORE creating debug entry
             system_prompt = get_system_prompt(mode)
@@ -345,7 +360,7 @@ class MessageListCreateView(APIView):
                 conversation_history=conversation_history_text,
                 model_used=model,
                 mode_used=mode,
-                temperature=0.0,
+                temperature=temperature,
                 prompt_length=len(enhanced_prompt),
                 memories_used_count=len(all_memories),
                 relevant_memories_count=len(relevant_memories),
@@ -356,6 +371,73 @@ class MessageListCreateView(APIView):
             logger.info(
                 f"[DEBUG ENTRY] Created debug entry {debug_entry.id} with system_prompt: {len(debug_entry.system_prompt)} chars, memory_context: {len(debug_entry.memory_context)} chars, conversation_history: {len(debug_entry.conversation_history)} chars"
             )
+
+            # Agent mode: Use the agent utility directly
+            if mode == "agent":
+                try:
+                    logger.info(f"[AGENT MODE] Starting agent for user: {request.user.username}")
+
+                    # Call the agent utility function directly
+                    final_response = run_agent(
+                        user=request.user,
+                        conversation_id=conversation.id,
+                        question=user_message,
+                        model=model,  # Pass the model from the request
+                        temperature=temperature,
+                    )
+
+                    logger.info(f"[AGENT MODE] Agent finished with response: {final_response[:200]}...")
+
+                    # Create the bot message with the final answer
+                    bot_msg = Message.objects.create(
+                        conversation=conversation,
+                        sender=request.user,
+                        content=final_response,
+                        is_bot=True,
+                        role="assistant",
+                        metadata={
+                            "model": model,
+                            "mode": mode,
+                            "agent_framework": "run_agent",
+                            "debug_entry_id": debug_entry.id,
+                        },
+                    )
+
+                    debug_entry.bot_response = bot_msg
+                    debug_entry.save()
+
+                    # Start background conversation memory extraction for agent mode too
+                    memory_thread = Thread(
+                        target=async_conversation_memory_extraction, 
+                        args=(user_msg.id, bot_msg.id, request.user.id)
+                    )
+                    memory_thread.daemon = True
+                    memory_thread.start()
+                    logger.info(f"[AGENT CONVERSATION MEMORY] Started background extraction for agent message pair {user_msg.id} + {bot_msg.id}")
+
+                    conversation.context.update({"last_bot_response": bot_msg.content})
+                    conversation.save()
+
+                    return Response(
+                        {
+                            "id": bot_msg.id,
+                            "content": bot_msg.content,
+                            "created_at": bot_msg.created_at,
+                            "is_bot": bot_msg.is_bot,
+                        },
+                        status=status.HTTP_201_CREATED,
+                    )
+
+                except Exception as agent_err:
+                    logger.error(f"[AGENT MODE] Agent execution failed: {agent_err}", exc_info=True)
+                    bot_msg = Message.objects.create(
+                        conversation=conversation,
+                        sender=request.user,
+                        content=f"An error occurred in agent mode: {agent_err}",
+                        is_bot=True,
+                        role="assistant",
+                    )
+                    return Response({"id": bot_msg.id, "content": bot_msg.content}, status=status.HTTP_201_CREATED)
 
             try:
                 logger.info(f"[LLM CALL] Calling LLM with model={model}, prompt_length={len(enhanced_prompt)}")
@@ -401,6 +483,15 @@ class MessageListCreateView(APIView):
                 logger.info(
                     f"[MESSAGE CREATION] Created bot message {bot_msg.id} with full response and debug entry {debug_entry.id}"
                 )
+
+                # Start background conversation memory extraction with user + AI message pair
+                memory_thread = Thread(
+                    target=async_conversation_memory_extraction, 
+                    args=(user_msg.id, bot_msg.id, request.user.id)
+                )
+                memory_thread.daemon = True
+                memory_thread.start()
+                logger.info(f"[CONVERSATION MEMORY] Started background extraction for message pair {user_msg.id} + {bot_msg.id}")
 
                 # Update conversation context with enhanced information
                 conversation.context = {

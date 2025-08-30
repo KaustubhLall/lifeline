@@ -217,25 +217,32 @@ const ConnectorsTab = () => {
                 </div>
 
                 <div className="connector-actions">
-                    {!status.authenticated ? (
-                        <div className="auth-actions">
+                    <div className="auth-actions">
+                        {!status.authenticated && (
                             <button onClick={handleGmailAuth} className="auth-button">
                                 Authenticate Gmail
                             </button>
-                            <button onClick={() => setShowUploadDialog(true)} className="config-button">
-                                Upload OAuth Config
-                            </button>
-                        </div>
-                    ) : (
-                        <>
-                            <button onClick={() => setShowTestDialog(true)} className="test-button">
-                                Test Operations
-                            </button>
+                        )}
+                        <button onClick={() => setShowUploadDialog(true)} className="config-button">
+                            {status.authenticated ? 'Re-upload Config' : 'Upload OAuth Config'}
+                        </button>
+                    </div>
+
+                    <div className="test-actions">
+                        <button
+                            onClick={() => status.authenticated && setShowTestDialog(true)}
+                            className="test-button"
+                            disabled={!status.authenticated}
+                            title={!status.authenticated ? 'Authenticate to test operations' : 'Test Operations'}
+                        >
+                            Test Operations
+                        </button>
+                        {status.authenticated && (
                             <button onClick={handleGmailAuth} className="reauth-button">
                                 Re-authenticate
                             </button>
-                        </>
-                    )}
+                        )}
+                    </div>
                 </div>
             </div>
         );
