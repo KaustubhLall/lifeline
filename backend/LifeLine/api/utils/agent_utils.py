@@ -103,11 +103,20 @@ def run_agent(user: User, conversation_id: int, question: str, model: str = "gpt
                         final_response = last_message.content
                         logger.info(f"[LangGraph Agent] Captured final response from agent node")
             
-            # Also check for __end__ pattern
+            # Also check for __end__ pattern with safe access
             if "__end__" in output:
-                final_response = output["__end__"]["messages"][-1].content
-                logger.info(f"[LangGraph Agent] Captured final response from __end__ node")
-                break
+                try:
+                    end_data = output["__end__"]
+                    if isinstance(end_data, dict) and "messages" in end_data and end_data["messages"]:
+                        last_message = end_data["messages"][-1]
+                        if hasattr(last_message, 'content') and last_message.content:
+                            final_response = last_message.content
+                            logger.info(f"[LangGraph Agent] Captured final response from __end__ node")
+                            break
+                    logger.warning(f"[LangGraph Agent] __end__ node has unexpected structure: {end_data}")
+                except (KeyError, IndexError, AttributeError) as e:
+                    logger.warning(f"[LangGraph Agent] Error accessing __end__ node: {e}")
+                    continue
         
         if final_response is None:
             return "I was unable to find a clear answer to your request. Please try rephrasing it."

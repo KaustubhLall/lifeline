@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from typing import List, Dict, Optional
 
 import numpy as np
@@ -35,7 +36,6 @@ def extract_and_store_conversation_memory(user_message: Message, ai_message: Mes
         logger.info(f"[CONVERSATION MEMORY] Starting extraction for conversation pair: user msg {user_message.id} + AI msg {ai_message.id}")
 
         # Extract memory using conversation pair LLM function
-        from datetime import datetime
         current_date = datetime.now().strftime("%Y-%m-%d")
         
         memory_data = call_llm_conversation_memory_extraction(

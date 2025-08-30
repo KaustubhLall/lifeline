@@ -93,27 +93,16 @@ const ConnectorsTab = () => {
         } catch (error) {
             console.error('Error initiating Gmail auth:', error);
 
-            // Check if this is a 400 error (missing OAuth config)
-            if (error.message && error.message.includes('400')) {
-                // Try to get the response data for 400 errors
+            // Check if this is a 400 error (missing OAuth config) using proper error handling
+            if (error.response && error.response.status === 400) {
                 try {
-                    const errorResponse = await fetch(`${API_BASE}/mcp/gmail/auth/`, {
-                        method: 'GET',
-                        headers: {
-                            'Authorization': `Token ${localStorage.getItem('authToken')}`,
-                            'Content-Type': 'application/json',
-                        },
-                    });
-
-                    if (errorResponse.status === 400) {
-                        const errorData = await errorResponse.json();
-                        if (errorData.requires_config || errorData.error.includes('OAuth configuration file not found')) {
-                            setShowUploadDialog(true);
-                            return;
-                        }
+                    const errorData = await error.response.json();
+                    if (errorData.requires_config || (errorData.error && errorData.error.includes('OAuth configuration file not found'))) {
+                        setShowUploadDialog(true);
+                        return;
                     }
-                } catch (retryError) {
-                    console.error('Error getting 400 response details:', retryError);
+                } catch (parseError) {
+                    console.error('Error parsing 400 response:', parseError);
                 }
             }
 
@@ -217,32 +206,27 @@ const ConnectorsTab = () => {
                 </div>
 
                 <div className="connector-actions">
-                    <div className="auth-actions">
-                        {!status.authenticated && (
-                            <button onClick={handleGmailAuth} className="auth-button">
-                                Authenticate Gmail
-                            </button>
-                        )}
-                        <button onClick={() => setShowUploadDialog(true)} className="config-button">
-                            {status.authenticated ? 'Re-upload Config' : 'Upload OAuth Config'}
+                    {!status.authenticated && (
+                        <button onClick={handleGmailAuth} className="auth-button">
+                            Authenticate Gmail
                         </button>
-                    </div>
-
-                    <div className="test-actions">
-                        <button
-                            onClick={() => status.authenticated && setShowTestDialog(true)}
-                            className="test-button"
-                            disabled={!status.authenticated}
-                            title={!status.authenticated ? 'Authenticate to test operations' : 'Test Operations'}
-                        >
-                            Test Operations
+                    )}
+                    <button onClick={() => setShowUploadDialog(true)} className="config-button">
+                        {status.authenticated ? 'Re-upload Config' : 'Upload OAuth Config'}
+                    </button>
+                    <button
+                        onClick={() => status.authenticated && setShowTestDialog(true)}
+                        className="test-button"
+                        disabled={!status.authenticated}
+                        title={!status.authenticated ? 'Authenticate to test operations' : 'Test Operations'}
+                    >
+                        Test Operations
+                    </button>
+                    {status.authenticated && (
+                        <button onClick={handleGmailAuth} className="reauth-button">
+                            Re-authenticate
                         </button>
-                        {status.authenticated && (
-                            <button onClick={handleGmailAuth} className="reauth-button">
-                                Re-authenticate
-                            </button>
-                        )}
-                    </div>
+                    )}
                 </div>
             </div>
         );

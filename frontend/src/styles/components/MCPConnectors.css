@@ -3,7 +3,7 @@
 }
 
 .connectors-description {
-    color: #666;
+    color: var(--text-muted);
     margin-bottom: 25px;
     font-size: 14px;
     line-height: 1.5;
@@ -20,18 +20,18 @@
 }
 
 .mcp-header h2 {
-    color: #333;
+    color: var(--text-color);
     margin-bottom: 8px;
 }
 
 .mcp-header p {
-    color: #666;
+    color: var(--text-muted);
     margin: 0;
 }
 
 .connector-card {
-    background: white;
-    border: 1px solid #e1e5e9;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
     border-radius: 8px;
     padding: 20px;
     margin-bottom: 20px;
@@ -47,7 +47,7 @@
 
 .connector-header h3 {
     margin: 0;
-    color: #333;
+    color: var(--text-color);
 }
 
 .status-badge {
@@ -65,78 +65,101 @@
 
 .connector-details p {
     margin: 8px 0;
-    color: #555;
+    color: var(--text-muted);
 }
 
 .connector-actions {
     display: flex;
     gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
 }
 
-.auth-button, .test-button, .reauth-button {
+.auth-button, .test-button, .reauth-button, .config-button {
     padding: 8px 16px;
     border: none;
     border-radius: 4px;
     cursor: pointer;
     font-weight: 500;
     transition: background-color 0.2s;
+    color: white;
+    margin: 0;
 }
 
 .auth-button {
-    background-color: #4CAF50;
-    color: white;
+    background-color: var(--status-success-bg);
 }
 
 .auth-button:hover {
-    background-color: #45a049;
+    background-color: var(--status-success-hover);
 }
 
 .auth-button:disabled {
-    background-color: #BDBDBD; /* Grey background for disabled state */
+    background-color: var(--btn-disabled-bg); /* Grey background for disabled state */
     cursor: not-allowed;
     opacity: 0.6;
 }
 
 .auth-button:disabled:hover {
-    background-color: #BDBDBD; /* Keep background color on hover */
+    background-color: var(--btn-disabled-bg); /* Keep background color on hover */
+}
+
+.auth-button {
+    margin-bottom: 10px;
 }
 
 .test-button {
-    background-color: #2196F3;
-    color: white;
+    background-color: var(--btn-primary-bg);
 }
 
 .test-button:hover {
-    background-color: #1976D2;
+    background-color: var(--btn-primary-hover);
 }
 
 .test-button:disabled {
-    background-color: #BDBDBD; /* Grey background for disabled state */
+    background-color: var(--btn-disabled-bg); /* Grey background for disabled state */
     cursor: not-allowed;
     opacity: 0.6;
 }
 
 .test-button:disabled:hover {
-    background-color: #BDBDBD; /* Keep background color on hover */
+    background-color: var(--btn-disabled-bg); /* Keep background color on hover */
 }
 
 .reauth-button {
-    background-color: #FF9800;
-    color: white;
+    background-color: var(--status-warning-bg);
 }
 
 .reauth-button:hover {
-    background-color: #F57C00;
+    background-color: var(--status-warning-hover);
 }
 
 .reauth-button:disabled {
-    background-color: #BDBDBD; /* Grey background for disabled state */
+    background-color: var(--btn-disabled-bg); /* Grey background for disabled state */
     cursor: not-allowed;
     opacity: 0.6;
 }
 
 .reauth-button:disabled:hover {
-    background-color: #BDBDBD; /* Keep background color on hover */
+    background-color: var(--btn-disabled-bg); /* Keep background color on hover */
+}
+
+.config-button {
+    background-color: var(--btn-secondary-bg);
+}
+
+.config-button:hover {
+    background-color: var(--btn-secondary-hover);
+}
+
+.config-button:disabled {
+    background-color: var(--btn-disabled-bg);
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.config-button:disabled:hover {
+    background-color: var(--btn-disabled-bg);
 }
 
 .operations-history {
@@ -144,18 +167,18 @@
 }
 
 .operations-history h4 {
-    color: #333;
+    color: var(--text-color);
     margin-bottom: 15px;
 }
 
 .operations-list {
-    background: #f8f9fa;
+    background: var(--card-bg);
     border-radius: 4px;
     padding: 15px;
 }
 
 .operation-item {
-    background: white;
+    background: var(--card-bg);
     border-radius: 4px;
     padding: 12px;
     margin-bottom: 10px;
@@ -171,7 +194,7 @@
 }
 
 .operation-item.pending {
-    border-left-color: #FF9800;
+    border-left-color: #191817;
 }
 
 .operation-header {
@@ -183,12 +206,12 @@
 
 .operation-type {
     font-weight: 500;
-    color: #333;
+    color: var(--text-color);
 }
 
 .operation-time {
     font-size: 12px;
-    color: #666;
+    color: var(--text-muted);
 }
 
 .operation-details {
@@ -205,23 +228,32 @@
 }
 
 .operation-status.success {
-    background-color: #E8F5E8;
-    color: #2E7D32;
+    background-color: var(--status-success-bg);
+    color: var(--text-color-light);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 500;
 }
 
-.operation-status.error {
-    background-color: #FFEBEE;
-    color: #C62828;
+.operation-status.failed {
+    background-color: var(--status-error-bg);
+    color: var(--text-color-light);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 500;
 }
 
 .operation-status.pending {
-    background-color: #FFF3E0;
-    color: #EF6C00;
+    background-color: var(--status-warning-bg);
+    color: var(--text-color-dark);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 500;
 }
 
 .operation-duration {
     font-size: 12px;
-    color: #666;
+    color: var(--text-muted);
 }
 
 .operation-error {
@@ -247,7 +279,7 @@
 }
 
 .test-dialog {
-    background: white;
+    background: var(--card-bg);
     border-radius: 8px;
     width: 90%;
     max-width: 600px;
@@ -266,7 +298,7 @@
 
 .test-dialog-header h3 {
     margin: 0;
-    color: #333;
+    color: var(--text-color);
 }
 
 .close-button {
@@ -274,7 +306,7 @@
     border: none;
     font-size: 24px;
     cursor: pointer;
-    color: #666;
+    color: var(--text-muted);
     padding: 0;
     width: 30px;
     height: 30px;
@@ -284,7 +316,7 @@
 }
 
 .close-button:hover {
-    color: #333;
+    color: var(--text-color);
 }
 
 .test-dialog-content {
@@ -301,18 +333,18 @@
     justify-content: space-between;
     align-items: center;
     padding: 12px;
-    border: 1px solid #e1e5e9;
+    border: 1px solid var(--card-border);
     border-radius: 4px;
     margin-bottom: 10px;
 }
 
 .test-operation h4 {
     margin: 0;
-    color: #333;
+    color: var(--text-color);
 }
 
 .test-op-button {
-    background-color: #2196F3;
+    background-color: var(--btn-primary-bg);
     color: white;
     border: none;
     padding: 6px 12px;
@@ -322,17 +354,17 @@
 }
 
 .test-op-button:hover {
-    background-color: #1976D2;
+    background-color: var(--btn-primary-hover);
 }
 
 .test-op-button:disabled {
-    background-color: #BDBDBD; /* Grey background for disabled state */
+    background-color: var(--btn-disabled-bg); /* Grey background for disabled state */
     cursor: not-allowed;
     opacity: 0.6;
 }
 
 .test-op-button:disabled:hover {
-    background-color: #BDBDBD; /* Keep background color on hover */
+    background-color: var(--btn-disabled-bg); /* Keep background color on hover */
 }
 
 .test-result {
@@ -342,11 +374,11 @@
 
 .test-result h4 {
     margin: 0 0 10px 0;
-    color: #333;
+    color: var(--text-color);
 }
 
 .test-result pre {
-    background-color: #f8f9fa;
+    background-color: var(--card-bg);
     padding: 15px;
     border-radius: 4px;
     overflow-x: auto;
@@ -358,8 +390,29 @@
 .loading {
     text-align: center;
     padding: 40px;
-    color: #666;
+    color: var(--text-muted);
     font-style: italic;
+}
+
+.status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.status-success {
+    background-color: var(--status-success-bg);
+}
+
+.status-pending {
+    background-color: var(--status-warning-bg);
+}
+
+.status-failed {
+    background-color: var(--status-error-bg);
 }
 
 /* OAuth configuration upload dialog styles */
@@ -369,31 +422,6 @@
     flex-wrap: wrap;
 }
 
-.config-button {
-    background-color: #9C27B0;
-    color: white;
-    padding: 8px 16px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: 500;
-    transition: background-color 0.2s;
-}
-
-.config-button:hover {
-    background-color: #7B1FA2;
-}
-
-.config-button:disabled {
-    background-color: #BDBDBD; /* Grey background for disabled state */
-    cursor: not-allowed;
-    opacity: 0.6;
-}
-
-.config-button:disabled:hover {
-    background-color: #BDBDBD; /* Keep background color on hover */
-}
-
 .upload-dialog {
     max-width: 700px;
 }
@@ -401,14 +429,14 @@
 .upload-instructions {
     margin-bottom: 20px;
     padding: 15px;
-    background-color: #f8f9fa;
+    background-color: var(--card-bg);
     border-radius: 4px;
     border-left: 4px solid #2196F3;
 }
 
 .upload-instructions h4 {
     margin: 0 0 10px 0;
-    color: #333;
+    color: var(--text-color);
 }
 
 .upload-instructions ol {
@@ -449,7 +477,7 @@
 
 .upload-section h4 {
     margin: 0 0 15px 0;
-    color: #333;
+    color: var(--text-color);
 }
 
 .file-input {
@@ -457,7 +485,7 @@
     padding: 8px;
     border: 1px solid #ddd;
     border-radius: 4px;
-    background-color: white;
+    background-color: var(--input-field-bg);
     cursor: pointer;
     width: 100%;
     max-width: 300px;
@@ -466,7 +494,7 @@
 .upload-note {
     margin: 0;
     font-size: 12px;
-    color: #666;
+    color: var(--text-muted);
     font-style: italic;
 }
 
@@ -516,8 +544,8 @@
     }
 
     .operation-details {
-        flex-direction: column;
-        align-items: flex-start;
+        display: flex;
+        justify-content: space-between;
         gap: 5px;
     }
 

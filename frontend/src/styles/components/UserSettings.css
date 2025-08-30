@@ -1,52 +1,55 @@
+/* ===== MODAL OVERLAY & STRUCTURE ===== */
 .settings-overlay {
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.7);
+    background: var(--modal-overlay);
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1050; /* Higher than sidebar (1020) and header (1030) */
+    z-index: 1050;
     padding: 1rem;
     backdrop-filter: blur(5px);
 }
 
-.settings-modal {
-    background: #1a1a2e;
+.user-settings-modal {
+    background: var(--modal-bg);
     border-radius: 12px;
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--modal-border);
     width: 100%;
     max-width: 900px;
-    max-height: 95vh;
+    height: 80vh;
+    margin: 5vh 0;
     display: flex;
     flex-direction: column;
 }
 
-.settings-header {
+/* ===== MODAL HEADER ===== */
+.user-settings-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 1rem 1.5rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    background: linear-gradient(135deg, #2d3748, #1a202c);
+    border-bottom: 1px solid var(--modal-border);
+    background: var(--modal-header-bg);
     flex-shrink: 0;
 }
 
-.settings-header h2 {
+.user-settings-header h2 {
     margin: 0;
-    color: white;
+    color: var(--text-color);
     font-size: 1.5rem;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .close-btn {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: var(--btn-secondary-bg);
+    border: 1px solid var(--card-border);
     font-size: 1.5rem;
-    color: white;
+    color: var(--text-color);
     cursor: pointer;
     padding: 0.25rem;
     border-radius: 6px;
@@ -59,8 +62,8 @@
 }
 
 .close-btn:hover {
-    background: rgba(255, 255, 255, 0.2);
-    border-color: rgba(255, 255, 255, 0.3);
+    background: var(--btn-secondary-hover);
+    border-color: var(--card-border);
     transform: scale(1.05);
 }
 
@@ -72,61 +75,64 @@
 }
 
 .alert-danger {
-    background: rgba(220, 53, 69, 0.2);
-    color: #ff6b6b;
-    border: 1px solid rgba(220, 53, 69, 0.3);
+    background: var(--status-error-bg);
+    color: var(--status-error-text);
+    border: 1px solid var(--status-error-border);
 }
 
 .alert-success {
-    background: rgba(40, 167, 69, 0.2);
-    color: #51cf66;
-    border: 1px solid rgba(40, 167, 69, 0.3);
+    background: var(--status-success-bg);
+    color: var(--status-success-text);
+    border: 1px solid var(--status-success-border);
 }
 
-.settings-tabs {
+.user-settings-tabs {
     display: flex;
     flex-wrap: nowrap;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    background: linear-gradient(135deg, #2d3748, #1a202c);
+    border-bottom: 1px solid var(--modal-border);
+    background: var(--modal-header-bg);
     flex-shrink: 0;
 }
 
 .tab-button {
-    background: rgba(255, 255, 255, 0.05); /* Add a subtle background */
-    border: 1px solid transparent; /* Add border for structure */
+    background: var(--btn-secondary-bg);
+    border: 1px solid transparent;
     padding: 0.75rem 1.25rem;
     cursor: pointer;
     font-size: 0.9rem;
-    color: rgba(255, 255, 255, 0.8); /* Make text brighter */
+    color: var(--text-muted);
     border-bottom: 3px solid transparent;
     transition: all 0.3s ease;
     white-space: nowrap;
 }
 
 .tab-button:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
+    background: var(--btn-secondary-hover);
+    color: var(--text-color);
 }
 
 .tab-button.active {
-    color: #007bff;
-    border-bottom-color: #007bff;
-    background: rgba(0, 123, 255, 0.1);
+    color: var(--text-color);
+    border-bottom-color: var(--btn-primary-bg);
+    background: var(--card-hover-bg);
 }
 
-.settings-content {
+.user-settings-content {
     flex: 1;
     padding: 1.5rem;
-    overflow-y: auto;
-    background: #1a1a2e;
+    background: var(--modal-bg);
+    display: flex;
+    flex-direction: column;
+    min-height: 0; /* CRITICAL for flex children */
 }
 
-.settings-content h3 {
-    color: white;
+.user-settings-content h3 {
+    color: var(--text-color);
     margin-bottom: 1.5rem;
     padding-bottom: 0.5rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid var(--card-border);
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    margin-top: 1rem;
 }
 
 .form-group {
@@ -137,48 +143,48 @@
     display: block;
     margin-bottom: 0.5rem;
     font-weight: 500;
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--text-color);
 }
 
 .form-control {
     width: 100%;
     padding: 0.75rem;
-    border: 1px solid rgba(255, 255, 255, 0.3);
+    border: 1px solid var(--card-border);
     border-radius: 6px;
     font-size: 1rem;
     transition: all 0.2s ease;
-    background: rgba(255, 255, 255, 0.08); /* Lighter background */
-    color: #ffffff; /* Ensure white text */
-    caret-color: #ffffff; /* White cursor */
+    background: var(--input-field-bg);
+    color: var(--text-color);
+    caret-color: var(--text-color);
 }
 
 .form-control:focus {
     outline: none;
-    border-color: #007bff;
-    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
-    background: rgba(255, 255, 255, 0.12); /* Slightly lighter when focused */
-    color: #ffffff; /* Maintain white text when focused */
+    border-color: var(--btn-primary-bg);
+    box-shadow: 0 0 0 2px var(--primary-focus-shadow);
+    background: var(--card-hover-bg);
+    color: var(--text-color);
 }
 
 .form-control::placeholder {
-    color: rgba(255, 255, 255, 0.5); /* Lighter placeholder for contrast */
+    color: var(--text-light);
 }
 
 .form-control::-webkit-input-placeholder {
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-light);
 }
 
 .form-control::-moz-placeholder {
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-light);
     opacity: 1;
 }
 
 .form-control:-ms-input-placeholder {
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-light);
 }
 
 .form-text {
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--text-muted);
     font-size: 0.875rem;
     margin-top: 0.25rem;
 }
@@ -202,34 +208,37 @@
 }
 
 .btn-primary {
-    background: linear-gradient(135deg, #007bff, #0056b3);
+    background: var(--btn-primary-bg);
     color: white;
     box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+    border: 1px solid var(--btn-primary-bg);
 }
 
 .btn-primary:hover:not(:disabled) {
-    background: linear-gradient(135deg, #0056b3, #004085);
+    background: var(--btn-primary-hover);
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4);
+    border-color: var(--btn-primary-hover);
 }
 
 .btn-secondary {
-    background: linear-gradient(135deg, #6c757d, #495057);
-    color: white;
+    background: var(--btn-secondary-bg);
+    color: var(--text-color);
     box-shadow: 0 2px 8px rgba(108, 117, 125, 0.3);
+    border: 1px solid var(--card-border);
 }
 
 .btn-secondary:hover:not(:disabled) {
-    background: linear-gradient(135deg, #495057, #343a40);
+    background: var(--btn-secondary-hover);
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(108, 117, 125, 0.4);
 }
 
 .password-confirm {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--card-bg);
     padding: 1.5rem;
     border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--card-border);
     margin-top: 1rem;
 }
 
@@ -239,6 +248,14 @@
     margin-top: 1rem;
 }
 
+.memories-tab {
+    display: flex;
+    flex-direction: column;
+    flex: 1; /* Allow tab to fill the entire settings-content area */
+    min-height: 0; /* CRITICAL for nested flex scrolling */
+    height: 100%; /* Ensure full height */
+}
+
 .memories-list {
     flex: 1; /* Allow list to grow and fill space */
     overflow-y: auto; /* Enable scrolling on this element */
@@ -246,6 +263,7 @@
     margin-right: -1rem; /* Counteract padding for alignment */
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.3) rgba(0, 0, 0, 0.2);
+    max-height: calc(80vh - 250px); /* Adjusted for smaller modal */
 }
 
 .memories-list::-webkit-scrollbar {
@@ -398,6 +416,144 @@
     margin-bottom: 1rem; /* Added bottom margin */
 }
 
+/* Connectors tab styling */
+.connectors-tab,
+.profile-tab,
+.password-tab {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+}
+
+.connectors-content,
+.profile-content,
+.password-content {
+    flex: 1;
+    overflow-y: auto;
+    max-height: calc(80vh - 250px);
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.3) rgba(0, 0, 0, 0.2);
+}
+
+.connectors-content::-webkit-scrollbar,
+.profile-content::-webkit-scrollbar,
+.password-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.connectors-content::-webkit-scrollbar-track,
+.profile-content::-webkit-scrollbar-track,
+.password-content::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+
+.connectors-content::-webkit-scrollbar-thumb,
+.profile-content::-webkit-scrollbar-thumb,
+.password-content::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+}
+
+.connectors-content::-webkit-scrollbar-thumb:hover,
+.profile-content::-webkit-scrollbar-thumb:hover,
+.password-content::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.5);
+}
+
+/* Fix white backgrounds in connectors - high specificity overrides */
+.user-settings-content .connector-card,
+.user-settings-content .mcp-connectors .connector-card,
+.user-settings-content .gmail-connector,
+.user-settings-content .operation-item,
+.user-settings-content .operations-list .operation-item,
+.user-settings-content .operations-section,
+.user-settings-content .operations-section .operation-item,
+.user-settings-content .recent-operations .operation-item {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.user-settings-content .connector-card:hover,
+.user-settings-content .gmail-connector:hover,
+.user-settings-content .operation-item:hover,
+.user-settings-content .operations-section .operation-item:hover,
+.user-settings-content .recent-operations .operation-item:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Additional fixes for operation items and sections */
+.user-settings-content .operations-section h3,
+.user-settings-content .recent-operations h3,
+.user-settings-content .operations-header,
+.user-settings-content .operation-time,
+.user-settings-content .operation-duration,
+.user-settings-content .operation-details {
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Force all operation-related elements to use dark theme */
+.user-settings-content div[class*="operation"],
+.user-settings-content .operations-list > div,
+.user-settings-content .recent-operations > div,
+.user-settings-content .operations-section > div,
+.user-settings-content [class*="operation-item"],
+.user-settings-content [style*="background"] {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Fix text colors in connectors */
+.user-settings-content .connector-header h3,
+.user-settings-content .mcp-header h2,
+.user-settings-content .connectors-description,
+.user-settings-content .mcp-header p,
+.user-settings-content .operation-name,
+.user-settings-content .operation-status,
+.user-settings-content .connector-info,
+.user-settings-content .connector-info span,
+.user-settings-content .connector-info strong {
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Fix button alignment and styling in MCP connectors */
+.user-settings-content .connector-actions,
+.user-settings-content .connector-buttons {
+    display: flex !important;
+    gap: 0.5rem !important;
+    align-items: center !important;
+    flex-wrap: wrap !important;
+    margin-top: 1rem !important;
+}
+
+.user-settings-content .connector-actions button,
+.user-settings-content .connector-buttons button,
+.user-settings-content button[class*="btn"] {
+    padding: 0.5rem 1rem !important;
+    border-radius: 4px !important;
+    font-size: 0.875rem !important;
+    font-weight: 500 !important;
+    border: none !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    white-space: nowrap !important;
+}
+
+/* Ensure connectors tab scrolls properly */
+.user-settings-content .connectors-tab {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+    min-height: 0 !important;
+    height: 100% !important;
+    overflow-y: auto !important;
+    max-height: calc(80vh - 250px) !important;
+}
+
 .memory-tag {
     display: inline-flex;
     align-items: center;
@@ -434,11 +590,14 @@
 }
 
 .pagination {
+    flex-shrink: 0; /* Prevent pagination from shrinking */
+    padding-top: 1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    margin-top: auto; /* Push to bottom */
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
-    margin-top: 1rem; /* Reduced from 1.5rem */
-    padding-top: 0.75rem; /* Reduced from 1rem */
+    gap: 1rem;
 }
 
 /* Mobile responsiveness */

@@ -1,5 +1,6 @@
 import React, {useEffect, useRef} from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {Prism as SyntaxHighlighter} from 'react-syntax-highlighter';
 import {tomorrow} from 'react-syntax-highlighter/dist/esm/styles/prism';
 import '../styles/components/ChatWindow.css';
@@ -19,6 +20,7 @@ function ChatWindow({messages, username}) {
     const MarkdownRenderer = ({content}) => {
         return (
             <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
                 components={{
                     code({node, inline, className, children, ...props}) {
                         const match = /language-(\w+)/.exec(className || '');
@@ -48,6 +50,45 @@ function ChatWindow({messages, username}) {
                     blockquote: ({children}) => <blockquote className="markdown-blockquote">{children}</blockquote>,
                     strong: ({children}) => <strong className="markdown-strong">{children}</strong>,
                     em: ({children}) => <em className="markdown-em">{children}</em>,
+                    // Table components with wrapper and copy functionality
+                    table: ({children}) => {
+                        const copyTableToClipboard = (e) => {
+                            const table = e.target.closest('.table-container').querySelector('table');
+                            const rows = Array.from(table.querySelectorAll('tr'));
+                            const csvContent = rows.map(row => {
+                                const cells = Array.from(row.querySelectorAll('th, td'));
+                                return cells.map(cell => cell.textContent.trim()).join('\t');
+                            }).join('\n');
+                            
+                            navigator.clipboard.writeText(csvContent).then(() => {
+                                e.target.textContent = 'Copied!';
+                                setTimeout(() => {
+                                    e.target.textContent = 'Copy';
+                                }, 2000);
+                            }).catch(() => {
+                                e.target.textContent = 'Failed';
+                                setTimeout(() => {
+                                    e.target.textContent = 'Copy';
+                                }, 2000);
+                            });
+                        };
+
+                        return (
+                            <div className="table-container">
+                                <div className="table-actions">
+                                    <button className="table-copy-btn" onClick={copyTableToClipboard}>
+                                        Copy
+                                    </button>
+                                </div>
+                                <table>{children}</table>
+                            </div>
+                        );
+                    },
+                    thead: ({children}) => <thead>{children}</thead>,
+                    tbody: ({children}) => <tbody>{children}</tbody>,
+                    tr: ({children}) => <tr>{children}</tr>,
+                    th: ({children}) => <th>{children}</th>,
+                    td: ({children}) => <td>{children}</td>,
                 }}
             >
                 {content}
