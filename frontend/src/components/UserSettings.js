@@ -1,41 +1,39 @@
 import React, {useEffect, useState} from 'react';
 import '../styles/components/UserSettings.css';
 import {API_BASE, fetchWithAuth} from '../utils/apiUtils';
+import ConnectorsTab from './ConnectorsTab';
 
-function UserSettings({onClose, username, userId}) {
+function UserSettings({onClose, username}) {
     const [activeTab, setActiveTab] = useState('profile');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
 
-    // Profile form state
+    // Profile
     const [profileData, setProfileData] = useState({
         username: username || '',
         email: '',
         first_name: '',
         last_name: ''
     });
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
 
-    // Password form state
+    // Password change
     const [passwordData, setPasswordData] = useState({
         current_password: '',
         new_password: '',
         confirm_password: ''
     });
 
-    // Password confirmation for profile changes
-    const [confirmPassword, setConfirmPassword] = useState('');
-    const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
-
-    // Memories and notes data
+    // Memories
     const [memories, setMemories] = useState([]);
     const [memoriesPage, setMemoriesPage] = useState(1);
     const [totalMemoriesPages, setTotalMemoriesPages] = useState(1);
-
-    // Editing state for memories
     const [editingMemory, setEditingMemory] = useState(null);
     const [editingContent, setEditingContent] = useState('');
 
+    // Initial load
     useEffect(() => {
         fetchUserProfile();
     }, []);
@@ -46,33 +44,21 @@ function UserSettings({onClose, username, userId}) {
         }
     }, [activeTab, memoriesPage]);
 
+    // ---------------- Profile ----------------
     const fetchUserProfile = async () => {
         try {
             setLoading(true);
-            const response = await fetchWithAuth(`${API_BASE}/user/profile/`);
-            const data = await response.json();
+            const res = await fetchWithAuth(`${API_BASE}/user/profile/`);
+            if (!res.ok) throw new Error('Failed to fetch profile');
+            const data = await res.json();
             setProfileData({
                 username: data.username || '',
                 email: data.email || '',
                 first_name: data.first_name || '',
                 last_name: data.last_name || ''
             });
-        } catch (error) {
-            setError('Failed to load profile data');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const fetchMemories = async () => {
-        try {
-            setLoading(true);
-            const response = await fetchWithAuth(`${API_BASE}/memories/?page=${memoriesPage}&page_size=10`);
-            const data = await response.json();
-            setMemories(data.memories || []);
-            setTotalMemoriesPages(data.pagination?.total_pages || 1);
-        } catch (error) {
-            setError('Failed to load memories');
+        } catch (err) {
+            setError('Failed to load profile');
         } finally {
             setLoading(false);
         }
@@ -80,79 +66,79 @@ function UserSettings({onClose, username, userId}) {
 
     const handleProfileUpdate = async () => {
         if (!confirmPassword) {
-            setError('Please enter your password to confirm changes');
+            setError('Enter password to confirm');
             return;
         }
-
         try {
             setLoading(true);
             setError('');
-
-            const response = await fetchWithAuth(`${API_BASE}/user/profile/`, {
+            const res = await fetchWithAuth(`${API_BASE}/user/profile/`, {
                 method: 'PATCH',
-                body: JSON.stringify({
-                    ...profileData,
-                    password: confirmPassword
-                })
+                body: JSON.stringify({...profileData, password: confirmPassword})
             });
-
-            if (response.ok) {
-                setSuccess('Profile updated successfully');
-                setConfirmPassword('');
-                setShowPasswordConfirm(false);
-                // Update localStorage if username changed
-                if (profileData.username !== username) {
-                    localStorage.setItem('username', profileData.username);
-                }
+            if (!res.ok) throw new Error('Failed to update profile');
+            setSuccess('Profile updated');
+            setConfirmPassword('');
+            setShowPasswordConfirm(false);
+            if (profileData.username !== username) {
+                localStorage.setItem('username', profileData.username);
             }
-        } catch (error) {
+        } catch (err) {
             setError('Failed to update profile');
         } finally {
             setLoading(false);
         }
     };
 
+    // ---------------- Password ----------------
     const handlePasswordChange = async () => {
         if (passwordData.new_password !== passwordData.confirm_password) {
-            setError('New passwords do not match');
+            setError('Passwords do not match');
             return;
         }
-
         if (passwordData.new_password.length < 8) {
-            setError('Password must be at least 8 characters long');
+            setError('Password must be at least 8 characters');
             return;
         }
-
         try {
             setLoading(true);
             setError('');
-
-            const response = await fetchWithAuth(`${API_BASE}/user/change-password/`, {
+            const res = await fetchWithAuth(`${API_BASE}/user/change-password/`, {
                 method: 'POST',
                 body: JSON.stringify({
                     current_password: passwordData.current_password,
                     new_password: passwordData.new_password
                 })
             });
-
-            if (response.ok) {
-                setSuccess('Password changed successfully');
-                setPasswordData({
-                    current_password: '',
-                    new_password: '',
-                    confirm_password: ''
-                });
-            }
-        } catch (error) {
+            if (!res.ok) throw new Error('Failed to change password');
+            setSuccess('Password changed');
+            setPasswordData({current_password: '', new_password: '', confirm_password: ''});
+        } catch (err) {
             setError('Failed to change password');
         } finally {
             setLoading(false);
         }
     };
 
-    const startEditingMemory = (memory) => {
-        setEditingMemory(memory.id);
-        setEditingContent(memory.content);
+    // ---------------- Memories ----------------
+    const fetchMemories = async () => {
+        try {
+            setLoading(true);
+            const res = await fetchWithAuth(`${API_BASE}/memories/?page=${memoriesPage}&page_size=10`);
+            if (!res.ok) throw new Error('Failed to fetch memories');
+            const data = await res.json();
+            setMemories(data.memories || []);
+            setTotalMemoriesPages(data.pagination?.total_pages || 1);
+        } catch (err) {
+            setError('Failed to load memories');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const startEditingMemory = (m) => {
+        setEditingMemory(m.id);
+        setEditingContent(m.content);
     };
 
     const cancelEditingMemory = () => {
@@ -160,388 +146,308 @@ function UserSettings({onClose, username, userId}) {
         setEditingContent('');
     };
 
-    const saveMemoryEdit = async (memoryId) => {
+    const saveMemoryEdit = async (id) => {
         try {
-            const response = await fetchWithAuth(`${API_BASE}/memories/${memoryId}/`, {
+            const res = await fetchWithAuth(`${API_BASE}/memories/${id}/`, {
                 method: 'PATCH',
-                body: JSON.stringify({
-                    content: editingContent
-                })
+                body: JSON.stringify({content: editingContent})
             });
-
-            if (response.ok) {
-                setMemories(memories.map(m =>
-                    m.id === memoryId
-                        ? {...m, content: editingContent}
-                        : m
-                ));
-                setEditingMemory(null);
-                setEditingContent('');
-                setSuccess('Memory updated successfully');
-            }
-        } catch (error) {
+            if (!res.ok) throw new Error('Failed to update memory');
+            setMemories(memories.map(m => m.id === id ? {...m, content: editingContent} : m));
+            setEditingMemory(null);
+            setEditingContent('');
+            setSuccess('Memory updated');
+        } catch (err) {
             setError('Failed to update memory');
         }
     };
 
-    const deleteMemory = async (memoryId) => {
-        if (!window.confirm('Are you sure you want to delete this memory?')) {
-            return;
-        }
-
+    const deleteMemory = async (id) => {
+        if (!window.confirm('Delete this memory?')) return;
         try {
-            await fetchWithAuth(`${API_BASE}/memories/${memoryId}/`, {
-                method: 'DELETE'
-            });
-            setMemories(memories.filter(m => m.id !== memoryId));
-            setSuccess('Memory deleted successfully');
-        } catch (error) {
+            const res = await fetchWithAuth(`${API_BASE}/memories/${id}/`, {method: 'DELETE'});
+            if (!res.ok) throw new Error('Failed to delete memory');
+            setMemories(memories.filter(m => m.id !== id));
+            setSuccess('Memory deleted');
+        } catch (err) {
             setError('Failed to delete memory');
         }
-    };
-
-    const formatDate = (dateString) => {
-        if (!dateString) return '';
-        return new Date(dateString).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
     };
 
     const formatRelativeTime = (dateString) => {
         if (!dateString) return '';
         const date = new Date(dateString);
         const now = new Date();
-        const diffInHours = Math.floor((now - date) / (1000 * 60 * 60));
-
-        if (diffInHours < 1) return 'Just now';
-        if (diffInHours < 24) return `${diffInHours}h ago`;
-        const diffInDays = Math.floor(diffInHours / 24);
-        if (diffInDays < 7) return `${diffInDays}d ago`;
-        const diffInWeeks = Math.floor(diffInDays / 7);
-        if (diffInWeeks < 4) return `${diffInWeeks}w ago`;
-        const diffInMonths = Math.floor(diffInDays / 30);
-        return `${diffInMonths}mo ago`;
+        const diffH = Math.floor((now - date) / 3600000);
+        if (diffH < 1) return 'Just now';
+        if (diffH < 24) return `${diffH}h ago`;
+        const d = Math.floor(diffH / 24);
+        if (d < 7) return `${d}d ago`;
+        const w = Math.floor(d / 7);
+        if (w < 4) return `${w}w ago`;
+        return `${Math.floor(d / 30)}mo ago`;
     };
 
-    const getMemoryTags = (memory) => {
+    const getMemoryTags = (m) => {
         const tags = [];
-
-        if (memory.is_auto_extracted) {
-            tags.push({
-                type: 'auto-extracted',
-                label: 'Created',
-                timestamp: memory.created_at
-            });
-        }
-
-        if (memory.edited_at) {
-            tags.push({
-                type: 'user-edited',
-                label: 'Edited',
-                timestamp: memory.edited_at
-            });
-        }
-
-        if (memory.last_accessed_at) {
-            tags.push({
-                type: 'last-accessed',
-                label: 'Accessed',
-                timestamp: memory.last_accessed_at
-            });
-        }
-
+        if (m.is_auto_extracted) tags.push({type: 'auto-extracted', label: 'Created', timestamp: m.created_at});
+        if (m.edited_at) tags.push({type: 'user-edited', label: 'Edited', timestamp: m.edited_at});
+        if (m.last_accessed_at) tags.push({type: 'last-accessed', label: 'Accessed', timestamp: m.last_accessed_at});
         return tags;
     };
 
-    return (
-        <div className="settings-overlay">
-            <div className="settings-modal">
-                <div className="settings-header">
-                    <h2>User Settings</h2>
-                    <button className="close-btn" onClick={onClose}>
-                        <i className="bi bi-x"></i>
-                    </button>
-                </div>
-
-                {error && (
-                    <div className="alert alert-danger">
-                        {error}
+    // ---------------- UI Sections ----------------
+    const ProfileTab = () => (
+        <div className="profile-tab">
+            <h3>Profile Information</h3>
+            <div className="form-group">
+                <label>Username</label>
+                <input
+                    type="text"
+                    className="form-control"
+                    value={profileData.username}
+                    onChange={e => setProfileData({...profileData, username: e.target.value})}
+                />
+            </div>
+            <div className="form-group">
+                <label>Email</label>
+                <input
+                    type="email"
+                    className="form-control"
+                    value={profileData.email}
+                    onChange={e => setProfileData({...profileData, email: e.target.value})}
+                />
+            </div>
+            <div className="form-group">
+                <label>First Name</label>
+                <input
+                    type="text"
+                    className="form-control"
+                    value={profileData.first_name}
+                    onChange={e => setProfileData({...profileData, first_name: e.target.value})}
+                />
+            </div>
+            <div className="form-group">
+                <label>Last Name</label>
+                <input
+                    type="text"
+                    className="form-control"
+                    value={profileData.last_name}
+                    onChange={e => setProfileData({...profileData, last_name: e.target.value})}
+                />
+            </div>
+            {!showPasswordConfirm ? (
+                <button className="btn btn-primary" onClick={() => setShowPasswordConfirm(true)}>
+                    Update Profile
+                </button>
+            ) : (
+                <div className="password-confirm">
+                    <div className="form-group">
+                        <label>Confirm Password</label>
+                        <input
+                            type="password"
+                            className="form-control"
+                            value={confirmPassword}
+                            onChange={e => setConfirmPassword(e.target.value)}
+                        />
                     </div>
-                )}
-
-                {success && (
-                    <div className="alert alert-success">
-                        {success}
+                    <div className="button-group">
+                        <button
+                            className="btn btn-secondary"
+                            onClick={() => {
+                                setShowPasswordConfirm(false);
+                                setConfirmPassword('');
+                            }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            className="btn btn-primary"
+                            disabled={loading}
+                            onClick={handleProfileUpdate}
+                        >
+                            {loading ? 'Saving...' : 'Save Changes'}
+                        </button>
                     </div>
-                )}
-
-                <div className="settings-tabs">
-                    <button
-                        className={`tab-btn ${activeTab === 'profile' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('profile')}
-                    >
-                        <i className="bi bi-person"></i>
-                        Profile
-                    </button>
-                    <button
-                        className={`tab-btn ${activeTab === 'password' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('password')}
-                    >
-                        <i className="bi bi-lock"></i>
-                        Password
-                    </button>
-                    <button
-                        className={`tab-btn ${activeTab === 'memories' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('memories')}
-                    >
-                        <i className="bi bi-journal-text"></i>
-                        Memories
-                    </button>
                 </div>
+            )}
+        </div>
+    );
 
-                <div className="settings-content">
-                    {activeTab === 'profile' && (
-                        <div className="profile-tab">
-                            <h3>Profile Information</h3>
-                            <div className="form-group">
-                                <label>Username</label>
-                                <input
-                                    type="text"
-                                    value={profileData.username}
-                                    onChange={(e) => setProfileData({...profileData, username: e.target.value})}
-                                    className="form-control"
-                                />
-                            </div>
-                            <div className="form-group">
-                                <label>Email</label>
-                                <input
-                                    type="email"
-                                    value={profileData.email}
-                                    onChange={(e) => setProfileData({...profileData, email: e.target.value})}
-                                    className="form-control"
-                                />
-                            </div>
-                            <div className="form-group">
-                                <label>First Name</label>
-                                <input
-                                    type="text"
-                                    value={profileData.first_name}
-                                    onChange={(e) => setProfileData({...profileData, first_name: e.target.value})}
-                                    className="form-control"
-                                />
-                            </div>
-                            <div className="form-group">
-                                <label>Last Name</label>
-                                <input
-                                    type="text"
-                                    value={profileData.last_name}
-                                    onChange={(e) => setProfileData({...profileData, last_name: e.target.value})}
-                                    className="form-control"
-                                />
-                            </div>
+    const PasswordTab = () => (
+        <div className="password-tab">
+            <h3>Change Password</h3>
+            <div className="form-group">
+                <label>Current Password</label>
+                <input
+                    type="password"
+                    className="form-control"
+                    value={passwordData.current_password}
+                    onChange={e => setPasswordData({...passwordData, current_password: e.target.value})}
+                />
+            </div>
+            <div className="form-group">
+                <label>New Password</label>
+                <input
+                    type="password"
+                    className="form-control"
+                    value={passwordData.new_password}
+                    onChange={e => setPasswordData({...passwordData, new_password: e.target.value})}
+                />
+            </div>
+            <div className="form-group">
+                <label>Confirm New Password</label>
+                <input
+                    type="password"
+                    className="form-control"
+                    value={passwordData.confirm_password}
+                    onChange={e => setPasswordData({...passwordData, confirm_password: e.target.value})}
+                />
+            </div>
+            <button
+                className="btn btn-primary"
+                disabled={loading || !passwordData.current_password}
+                onClick={handlePasswordChange}
+            >
+                {loading ? 'Changing...' : 'Change Password'}
+            </button>
+        </div>
+    );
 
-                            {!showPasswordConfirm ? (
-                                <button
-                                    className="btn btn-primary"
-                                    onClick={() => setShowPasswordConfirm(true)}
-                                >
-                                    Update Profile
-                                </button>
-                            ) : (
-                                <div className="password-confirm">
-                                    <div className="form-group">
-                                        <label>Confirm Password to Save Changes</label>
-                                        <input
-                                            type="password"
-                                            value={confirmPassword}
-                                            onChange={(e) => setConfirmPassword(e.target.value)}
-                                            className="form-control"
-                                            placeholder="Enter your current password"
+    const MemoriesTab = () => (
+        <div className="memories-tab">
+            <h3>Your Memories & Notes</h3>
+            {loading && memories.length === 0 ? (
+                <div className="loading">Loading memories...</div>
+            ) : (
+                <>
+                    <div className="memories-list">
+                        {memories.map(memory => (
+                            <div key={memory.id} className="memory-card">
+                                <div className="memory-tags">
+                                    {getMemoryTags(memory).map((tag, i) => (
+                                        <span key={i} className={`memory-tag ${tag.type}`}>
+                                            {tag.label}
+                                            {tag.timestamp && (
+                                                <span className="tag-timestamp">
+                                                    {' '}({formatRelativeTime(tag.timestamp)})
+                                                </span>
+                                            )}
+                                        </span>
+                                    ))}
+                                </div>
+                                {editingMemory === memory.id ? (
+                                    <div className="memory-edit">
+                                        <textarea
+                                            className="form-control memory-textarea"
+                                            rows={4}
+                                            value={editingContent}
+                                            onChange={e => setEditingContent(e.target.value)}
                                         />
+                                        <div className="button-group">
+                                            <button className="btn btn-secondary" onClick={cancelEditingMemory}>
+                                                Cancel
+                                            </button>
+                                            <button className="btn btn-primary"
+                                                    onClick={() => saveMemoryEdit(memory.id)}>
+                                                Save
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div className="button-group">
-                                        <button
-                                            className="btn btn-secondary"
-                                            onClick={() => {
-                                                setShowPasswordConfirm(false);
-                                                setConfirmPassword('');
-                                            }}
-                                        >
-                                            Cancel
-                                        </button>
-                                        <button
-                                            className="btn btn-primary"
-                                            onClick={handleProfileUpdate}
-                                            disabled={loading}
-                                        >
-                                            {loading ? 'Saving...' : 'Save Changes'}
-                                        </button>
+                                ) : (
+                                    <div className="memory-content">{memory.content}</div>
+                                )}
+                                <div className="memory-meta">
+                                    <span className="memory-type">{memory.memory_type || 'personal'}</span>
+                                    <div className="memory-meta-right">
+                                        <span className="memory-access">Accessed {memory.access_count || 0} times</span>
+                                        <div className="memory-actions">
+                                            {editingMemory !== memory.id && (
+                                                <button
+                                                    className="edit-btn"
+                                                    onClick={() => startEditingMemory(memory)}
+                                                    title="Edit"
+                                                >
+                                                    <i className="bi bi-pencil"/>
+                                                </button>
+                                            )}
+                                            <button
+                                                className="delete-btn"
+                                                onClick={() => deleteMemory(memory.id)}
+                                                title="Delete"
+                                            >
+                                                <i className="bi bi-trash"/>
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
-                            )}
-                        </div>
-                    )}
-
-                    {activeTab === 'password' && (
-                        <div className="password-tab">
-                            <h3>Change Password</h3>
-                            <div className="form-group">
-                                <label>Current Password</label>
-                                <input
-                                    type="password"
-                                    value={passwordData.current_password}
-                                    onChange={(e) => setPasswordData({
-                                        ...passwordData,
-                                        current_password: e.target.value
-                                    })}
-                                    className="form-control"
-                                />
                             </div>
-                            <div className="form-group">
-                                <label>New Password</label>
-                                <input
-                                    type="password"
-                                    value={passwordData.new_password}
-                                    onChange={(e) => setPasswordData({...passwordData, new_password: e.target.value})}
-                                    className="form-control"
-                                />
-                                <small className="form-text">Password must be at least 8 characters long</small>
-                            </div>
-                            <div className="form-group">
-                                <label>Confirm New Password</label>
-                                <input
-                                    type="password"
-                                    value={passwordData.confirm_password}
-                                    onChange={(e) => setPasswordData({
-                                        ...passwordData,
-                                        confirm_password: e.target.value
-                                    })}
-                                    className="form-control"
-                                />
-                            </div>
+                        ))}
+                    </div>
+                    {totalMemoriesPages > 1 && (
+                        <div className="pagination">
                             <button
-                                className="btn btn-primary"
-                                onClick={handlePasswordChange}
-                                disabled={loading || !passwordData.current_password || !passwordData.new_password}
+                                className="btn btn-secondary"
+                                disabled={memoriesPage === 1}
+                                onClick={() => setMemoriesPage(p => Math.max(1, p - 1))}
                             >
-                                {loading ? 'Changing...' : 'Change Password'}
+                                Previous
+                            </button>
+                            <span className="page-info">Page {memoriesPage} of {totalMemoriesPages}</span>
+                            <button
+                                className="btn btn-secondary"
+                                disabled={memoriesPage === totalMemoriesPages}
+                                onClick={() => setMemoriesPage(p => Math.min(totalMemoriesPages, p + 1))}
+                            >
+                                Next
                             </button>
                         </div>
                     )}
+                </>
+            )}
+        </div>
+    );
 
-                    {activeTab === 'memories' && (
-                        <div className="memories-tab">
-                            <h3>Your Memories & Notes</h3>
-                            {loading && memories.length === 0 ? (
-                                <div className="loading">Loading memories...</div>
-                            ) : (
-                                <>
-                                    <div className="memories-list">
-                                        {memories.map((memory) => (
-                                            <div key={memory.id} className="memory-card">
-                                                <div className="memory-tags">
-                                                    {getMemoryTags(memory).map((tag, index) => (
-                                                        <span key={index} className={`memory-tag ${tag.type}`}>
-                                                            {tag.label}
-                                                            {tag.timestamp && (
-                                                                <span className="tag-timestamp">
-                                                                    ({formatRelativeTime(tag.timestamp)})
-                                                                </span>
-                                                            )}
-                                                        </span>
-                                                    ))}
-                                                </div>
-
-                                                {editingMemory === memory.id ? (
-                                                    <div className="memory-edit">
-                                                        <textarea
-                                                            className="form-control memory-textarea"
-                                                            value={editingContent}
-                                                            onChange={(e) => setEditingContent(e.target.value)}
-                                                            rows={4}
-                                                        />
-                                                        <div className="button-group">
-                                                            <button
-                                                                className="btn btn-secondary"
-                                                                onClick={cancelEditingMemory}
-                                                            >
-                                                                Cancel
-                                                            </button>
-                                                            <button
-                                                                className="btn btn-primary"
-                                                                onClick={() => saveMemoryEdit(memory.id)}
-                                                            >
-                                                                Save
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    <div className="memory-content">
-                                                        {memory.content}
-                                                    </div>
-                                                )}
-
-                                                <div className="memory-meta">
-                                                    <span className="memory-type">
-                                                        {memory.memory_type || 'personal'}
-                                                    </span>
-                                                    <div className="memory-meta-right">
-                                                        <span className="memory-access">
-                                                            Accessed {memory.access_count || 0} times
-                                                        </span>
-                                                        <div className="memory-actions">
-                                                            {editingMemory !== memory.id && (
-                                                                <button
-                                                                    className="edit-btn"
-                                                                    onClick={() => startEditingMemory(memory)}
-                                                                    title="Edit memory"
-                                                                >
-                                                                    <i className="bi bi-pencil"></i>
-                                                                </button>
-                                                            )}
-                                                            <button
-                                                                className="delete-btn"
-                                                                onClick={() => deleteMemory(memory.id)}
-                                                                title="Delete memory"
-                                                            >
-                                                                <i className="bi bi-trash"></i>
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-
-                                    {totalMemoriesPages > 1 && (
-                                        <div className="pagination">
-                                            <button
-                                                className="btn btn-secondary"
-                                                onClick={() => setMemoriesPage(prev => Math.max(1, prev - 1))}
-                                                disabled={memoriesPage === 1}
-                                            >
-                                                Previous
-                                            </button>
-                                            <span className="page-info">
-                                                Page {memoriesPage} of {totalMemoriesPages}
-                                            </span>
-                                            <button
-                                                className="btn btn-secondary"
-                                                onClick={() => setMemoriesPage(prev => Math.min(totalMemoriesPages, prev + 1))}
-                                                disabled={memoriesPage === totalMemoriesPages}
-                                            >
-                                                Next
-                                            </button>
-                                        </div>
-                                    )}
-                                </>
-                            )}
-                        </div>
-                    )}
+    return (
+        <div className="user-settings-modal">
+            <div className="user-settings-header">
+                <h2>User Settings</h2>
+                <button onClick={onClose} className="close-button">×</button>
+            </div>
+            <div className="user-settings-body">
+                <div className="user-settings-tabs">
+                    <button
+                        className={`tab-button ${activeTab === 'profile' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('profile')}
+                    >
+                        Profile
+                    </button>
+                    <button
+                        className={`tab-button ${activeTab === 'password' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('password')}
+                    >
+                        Password
+                    </button>
+                    <button
+                        className={`tab-button ${activeTab === 'memories' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('memories')}
+                    >
+                        Memories
+                    </button>
+                    <button
+                        className={`tab-button ${activeTab === 'connectors' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('connectors')}
+                    >
+                        Connectors
+                    </button>
+                </div>
+                <div className="user-settings-content">
+                    {error && <div className="error-toast">{error}</div>}
+                    {success && <div className="success-toast">{success}</div>}
+                    {activeTab === 'profile' && <ProfileTab/>}
+                    {activeTab === 'password' && <PasswordTab/>}
+                    {activeTab === 'memories' && <MemoriesTab/>}
+                    {activeTab === 'connectors' && <ConnectorsTab/>}
                 </div>
             </div>
         </div>

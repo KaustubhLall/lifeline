@@ -4,6 +4,13 @@ from django.urls import path
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
+from .views.gmail_mcp import (
+    GmailAuthView,
+    GmailOperationsView,
+    GmailStatusView,
+    GmailConfigUploadView,
+    gmail_oauth_callback,
+)
 from .views.login import LoginView, RegisterView
 from .views.user_settings import UserProfileView, ChangePasswordView, MemoryListView, MemoryDetailView
 from .views.views import (
@@ -44,6 +51,12 @@ urlpatterns = [
     path("user/change-password/", ChangePasswordView.as_view(), name="change-password"),
     path("memories/", MemoryListView.as_view(), name="user-memories"),
     path("memories/<int:memory_id>/", MemoryDetailView.as_view(), name="memory-detail"),
+    # Gmail MCP endpoints
+    path("mcp/gmail/auth/", GmailAuthView.as_view(), name="gmail-mcp-auth"),
+    path("mcp/gmail/operations/", GmailOperationsView.as_view(), name="gmail-mcp-operations"),
+    path("mcp/gmail/status/", GmailStatusView.as_view(), name="gmail-mcp-status"),
+    path("mcp/gmail/upload-config/", GmailConfigUploadView.as_view(), name="gmail-mcp-upload-config"),
+    path("auth/gmail/callback/", gmail_oauth_callback, name="gmail-oauth-callback"),
     # Existing endpoints
     path("conversations/", ConversationListCreateView.as_view(), name="conversation-list"),
     path("conversations/<int:conversation_id>/", ConversationDetailView.as_view(), name="conversation-detail"),

@@ -1,0 +1,486 @@
+.connectors-tab {
+    padding: 0;
+}
+
+.connectors-description {
+    color: #666;
+    margin-bottom: 25px;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.mcp-connectors {
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.mcp-header {
+    margin-bottom: 30px;
+}
+
+.mcp-header h2 {
+    color: #333;
+    margin-bottom: 8px;
+}
+
+.mcp-header p {
+    color: #666;
+    margin: 0;
+}
+
+.connector-card {
+    background: white;
+    border: 1px solid #e1e5e9;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.connector-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.connector-header h3 {
+    margin: 0;
+    color: #333;
+}
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 4px;
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.connector-details {
+    margin-bottom: 20px;
+}
+
+.connector-details p {
+    margin: 8px 0;
+    color: #555;
+}
+
+.connector-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.auth-button, .test-button, .reauth-button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.auth-button {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.auth-button:hover {
+    background-color: #45a049;
+}
+
+.test-button {
+    background-color: #2196F3;
+    color: white;
+}
+
+.test-button:hover {
+    background-color: #1976D2;
+}
+
+.reauth-button {
+    background-color: #FF9800;
+    color: white;
+}
+
+.reauth-button:hover {
+    background-color: #F57C00;
+}
+
+.operations-history {
+    margin-top: 30px;
+}
+
+.operations-history h4 {
+    color: #333;
+    margin-bottom: 15px;
+}
+
+.operations-list {
+    background: #f8f9fa;
+    border-radius: 4px;
+    padding: 15px;
+}
+
+.operation-item {
+    background: white;
+    border-radius: 4px;
+    padding: 12px;
+    margin-bottom: 10px;
+    border-left: 4px solid #ddd;
+}
+
+.operation-item.success {
+    border-left-color: #4CAF50;
+}
+
+.operation-item.error {
+    border-left-color: #F44336;
+}
+
+.operation-item.pending {
+    border-left-color: #FF9800;
+}
+
+.operation-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.operation-type {
+    font-weight: 500;
+    color: #333;
+}
+
+.operation-time {
+    font-size: 12px;
+    color: #666;
+}
+
+.operation-details {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+}
+
+.operation-status {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+.operation-status.success {
+    background-color: #E8F5E8;
+    color: #2E7D32;
+}
+
+.operation-status.error {
+    background-color: #FFEBEE;
+    color: #C62828;
+}
+
+.operation-status.pending {
+    background-color: #FFF3E0;
+    color: #EF6C00;
+}
+
+.operation-duration {
+    font-size: 12px;
+    color: #666;
+}
+
+.operation-error {
+    margin-top: 8px;
+    padding: 8px;
+    background-color: #FFEBEE;
+    color: #C62828;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.test-dialog-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.test-dialog {
+    background: white;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 80%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.test-dialog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid #e1e5e9;
+}
+
+.test-dialog-header h3 {
+    margin: 0;
+    color: #333;
+}
+
+.close-button {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #666;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.close-button:hover {
+    color: #333;
+}
+
+.test-dialog-content {
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.test-operations {
+    margin-bottom: 20px;
+}
+
+.test-operation {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    border: 1px solid #e1e5e9;
+    border-radius: 4px;
+    margin-bottom: 10px;
+}
+
+.test-operation h4 {
+    margin: 0;
+    color: #333;
+}
+
+.test-op-button {
+    background-color: #2196F3;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.test-op-button:hover {
+    background-color: #1976D2;
+}
+
+.test-result {
+    border-top: 1px solid #e1e5e9;
+    padding-top: 20px;
+}
+
+.test-result h4 {
+    margin: 0 0 10px 0;
+    color: #333;
+}
+
+.test-result pre {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 12px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.loading {
+    text-align: center;
+    padding: 40px;
+    color: #666;
+    font-style: italic;
+}
+
+/* OAuth configuration upload dialog styles */
+.auth-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.config-button {
+    background-color: #9C27B0;
+    color: white;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.config-button:hover {
+    background-color: #7B1FA2;
+}
+
+.upload-dialog {
+    max-width: 700px;
+}
+
+.upload-instructions {
+    margin-bottom: 20px;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    border-left: 4px solid #2196F3;
+}
+
+.upload-instructions h4 {
+    margin: 0 0 10px 0;
+    color: #333;
+}
+
+.upload-instructions ol {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.upload-instructions li {
+    margin-bottom: 8px;
+    line-height: 1.4;
+}
+
+.upload-instructions code {
+    background-color: #e9ecef;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-family: monospace;
+    font-size: 12px;
+    word-break: break-all;
+}
+
+.upload-instructions a {
+    color: #2196F3;
+    text-decoration: none;
+}
+
+.upload-instructions a:hover {
+    text-decoration: underline;
+}
+
+.upload-section {
+    margin-bottom: 20px;
+    padding: 15px;
+    border: 2px dashed #ddd;
+    border-radius: 4px;
+    text-align: center;
+}
+
+.upload-section h4 {
+    margin: 0 0 15px 0;
+    color: #333;
+}
+
+.file-input {
+    margin-bottom: 10px;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: white;
+    cursor: pointer;
+    width: 100%;
+    max-width: 300px;
+}
+
+.upload-note {
+    margin: 0;
+    font-size: 12px;
+    color: #666;
+    font-style: italic;
+}
+
+.upload-error {
+    padding: 10px;
+    background-color: #FFEBEE;
+    color: #C62828;
+    border-radius: 4px;
+    border-left: 4px solid #F44336;
+    margin-top: 15px;
+}
+
+.upload-success {
+    padding: 10px;
+    background-color: #E8F5E8;
+    color: #2E7D32;
+    border-radius: 4px;
+    border-left: 4px solid #4CAF50;
+    margin-top: 15px;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .mcp-connectors {
+        padding: 15px;
+    }
+
+    .connector-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .connector-actions {
+        flex-direction: column;
+    }
+
+    .test-dialog {
+        width: 95%;
+        margin: 10px;
+    }
+
+    .operation-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+    }
+
+    .operation-details {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+    }
+
+    .auth-actions {
+        flex-direction: column;
+    }
+
+    .upload-instructions code {
+        font-size: 10px;
+    }
+
+    .file-input {
+        max-width: 100%;
+    }
+}
