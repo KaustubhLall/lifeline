@@ -1,0 +1,39 @@
+.debug-panel {
+    background-color: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+    padding: 8px 16px;
+}
+
+.debug-toggle-button {
+    background: none;
+    border: none;
+    color: #007bff;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    padding: 4px 0;
+    font-size: 0.9rem;
+}
+
+.debug-toggle-button i {
+    margin-left: 8px;
+}
+
+.debug-content {
+    padding: 16px 0 8px;
+}
+
+.debug-control {
+    display: flex;
+    flex-direction: column;
+}
+
+.debug-control label {
+    margin-bottom: 8px;
+    font-size: 0.85rem;
+    color: #495057;
+}
+
+.debug-control input[type="range"] {
+    width: 100%;
+}
