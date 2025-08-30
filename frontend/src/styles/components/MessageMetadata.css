@@ -1,0 +1,226 @@
+.message-metadata-container {
+    background-color: #2c2c2c; /* Slightly darker than message background */
+    border-radius: 8px;
+    padding: 12px;
+    margin-top: 8px;
+    border: 1px solid #444;
+    font-size: 0.85rem;
+}
+
+.metadata-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+}
+
+.metadata-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.metadata-label {
+    color: #aaa;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+}
+
+.metadata-value {
+    color: #eee;
+    font-weight: 500;
+}
+
+.token-breakdown {
+    color: #aaa;
+    font-size: 0.9em;
+    font-weight: normal;
+}
+
+.tool-calls-section {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #444;
+}
+
+.tool-calls-header {
+    color: #ccc;
+    font-size: 0.9rem;
+    margin-bottom: 8px;
+}
+
+.tool-calls-list {
+    list-style-type: none;
+    padding-left: 0;
+    margin: 0;
+}
+
+.tool-call-item {
+    color: #ddd;
+    padding: 2px 0;
+}
+
+.tool-name {
+    font-family: 'Courier New', Courier, monospace;
+}
+
+.tool-latency {
+    color: #aaa;
+    font-size: 0.85em;
+    font-weight: normal;
+}
+
+.no-tools {
+    color: #aaa;
+    font-style: italic;
+    margin: 0;
+    padding: 4px 0;
+}
+
+/* Agent details sections */
+.agent-details {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #444;
+}
+
+.agent-horizontal-layout {
+    display: flex;
+    gap: 16px;
+}
+
+.agent-section {
+    flex: 1;
+    min-width: 0; /* Allow sections to shrink */
+}
+
+.agent-section-left {
+    border-right: 1px solid #333;
+    padding-right: 12px;
+}
+
+.agent-section-right {
+    padding-left: 12px;
+}
+
+.agent-section-header {
+    color: #ccc;
+    font-size: 0.9rem;
+    margin-bottom: 8px;
+    font-weight: 600;
+    border-bottom: 1px solid #333;
+    padding-bottom: 4px;
+}
+
+.agent-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.agent-item {
+    padding: 8px 0;
+    border-bottom: 1px solid #2a2a2a;
+}
+
+.agent-item:last-child {
+    border-bottom: none;
+}
+
+.agent-item-main {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.agent-item-detail {
+    color: #888;
+    font-size: 0.75em;
+    font-style: italic;
+    margin-left: 4px;
+}
+
+.agent-item-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 4px;
+}
+
+.agent-empty {
+    color: #aaa;
+    font-style: italic;
+    margin: 0;
+    padding: 4px 0;
+}
+
+/* Tool-specific styling */
+.tool-name {
+    font-family: 'Courier New', Courier, monospace;
+    color: #ddd;
+    font-weight: 500;
+}
+
+.tool-latency {
+    color: #aaa;
+    font-size: 0.85em;
+    font-weight: normal;
+}
+
+/* Step-specific styling */
+.step-node {
+    font-family: 'Courier New', Courier, monospace;
+    color: #ddd;
+    font-weight: 500;
+}
+
+.step-duration {
+    color: #aaa;
+    font-size: 0.85em;
+}
+
+.step-tokens {
+    color: #bbb;
+    font-size: 0.8em;
+}
+
+.step-tools {
+    color: #9bb;
+    font-size: 0.8em;
+    font-style: italic;
+}
+
+.step-message-type {
+    color: #999;
+    font-size: 0.75em;
+    font-family: 'Courier New', Courier, monospace;
+}
+
+.step-detail {
+    color: #aaa;
+    font-size: 0.75em;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-right: 4px;
+}
+
+/* Responsive: Stack vertically on small screens */
+@media (max-width: 600px) {
+    .agent-horizontal-layout {
+        flex-direction: column;
+        gap: 12px;
+    }
+    
+    .agent-section-left {
+        border-right: none;
+        border-bottom: 1px solid #333;
+        padding-right: 0;
+        padding-bottom: 12px;
+    }
+    
+    .agent-section-right {
+        padding-left: 0;
+        padding-top: 0;
+    }
+}

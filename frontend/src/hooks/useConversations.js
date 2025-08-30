@@ -122,8 +122,11 @@ export function useConversations(authenticated, onLogout) {
             }
 
             const botMsg = await response.json();
+            console.log('Bot message received:', botMsg); // Debug log
+            console.log('Bot message metadata:', botMsg.metadata); // Debug log
+            
             setMessages(m => m.map(msg => msg.id === tempId ? {...msg, pending: false} : msg));
-            setMessages(m => [...m, botMsg]);
+            setMessages(m => [...m, {...botMsg}]); // Ensure proper object spread
         } catch (e) {
             const errorMessage = e.message.includes('budget')
                 ? 'API budget exceeded. Please try again later or contact support.'

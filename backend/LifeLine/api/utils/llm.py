@@ -2,6 +2,7 @@ import inspect
 import json
 import logging
 import os
+import time
 import traceback
 from datetime import datetime
 from typing import Optional
@@ -63,7 +64,7 @@ def _log_call_info(func_name: str, **kwargs):
     logger.info(f"[{filename}:{line_number}] Calling {func_name} with params: {kwargs}")
 
 
-def call_llm_text(prompt: str, model: str = "gpt-4.1-nano", temperature: float = 0.0) -> str:
+def call_llm_text(prompt: str, model: str = "gpt-4.1-nano", temperature: float = 0.0) -> dict:
     """
     Call the LLM to generate text response.
 
@@ -73,7 +74,7 @@ def call_llm_text(prompt: str, model: str = "gpt-4.1-nano", temperature: float =
         temperature: Controls randomness in the response
 
     Returns:
-        The generated text response
+        A dictionary containing the generated text response, token usage, and latency
 
     Raises:
         APIBudgetError: If the API budget is exceeded
@@ -86,22 +87,33 @@ def call_llm_text(prompt: str, model: str = "gpt-4.1-nano", temperature: float =
         client = get_openai_client()
         logger.info(f"Making OpenAI API call - Model: {model}, Prompt length: {len(prompt)} chars")
 
+        start_time = time.time()
         response = client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
             temperature=temperature,
         )
+        end_time = time.time()
+        latency_ms = round((end_time - start_time) * 1000)
 
         response_text = response.choices[0].message.content
         token_usage = response.usage
 
         logger.info(
-            f"LLM response received - Length: {len(response_text)} chars, "
+            f"LLM response received - Latency: {latency_ms}ms, Length: {len(response_text)} chars, "
             f"Tokens used: {token_usage.total_tokens} (prompt: {token_usage.prompt_tokens}, "
             f"completion: {token_usage.completion_tokens})"
         )
 
-        return response_text
+        return {
+            "text": response_text,
+            "usage": {
+                "prompt_tokens": token_usage.prompt_tokens,
+                "completion_tokens": token_usage.completion_tokens,
+                "total_tokens": token_usage.total_tokens,
+            },
+            "latency_ms": latency_ms,
+        }
 
     except Exception as e:
         error_msg = str(e).lower()
@@ -336,18 +348,19 @@ Only extract memories that would be genuinely useful to remember later.
     try:
         logger.info(f"Extracting memory from conversation pair - User: {len(user_message)} chars, AI: {len(ai_response)} chars")
 
-        response = call_llm_text(extraction_prompt, model=model, temperature=0.1)
+        response_data = call_llm_text(extraction_prompt, model=model, temperature=0.1)
+        response_text = response_data["text"]
 
         # Try to parse the JSON response
 
         try:
-            memory_data = json.loads(response)
+            memory_data = json.loads(response_text)
             logger.info(f"Conversation memory extraction successful - Has memory: {memory_data.get('has_memory', False)}")
             if memory_data.get('has_memory'):
                 logger.info(f"Memory type: {memory_data.get('memory_type')}, Actionable: {memory_data.get('is_actionable')}, Deadline: {memory_data.get('deadline_date')}")
             return memory_data
         except json.JSONDecodeError:
-            logger.warning(f"Failed to parse conversation memory extraction response as JSON: {response}")
+            logger.warning(f"Failed to parse conversation memory extraction response as JSON: {response_text}")
             return {"has_memory": False}
 
     except Exception as e:
@@ -402,21 +415,21 @@ def call_llm_memory_extraction(message_content: str, model: str = "gpt-4o-mini")
     """
 
     try:
-        logger.info(f"Extracting memory from single message - Length: {len(message_content)} chars (Consider using conversation pair extraction instead)")
+        logger.info(f"Extracting memory from message - Content length: {len(message_content)} chars")
 
-        response = call_llm_text(extraction_prompt, model=model, temperature=0.1)
+        response_data = call_llm_text(extraction_prompt, model=model, temperature=0.1)
+        response_text = response_data["text"]
 
         # Try to parse the JSON response
-
         try:
-            memory_data = json.loads(response)
+            memory_data = json.loads(response_text)
             logger.info(f"Memory extraction successful - Has memory: {memory_data.get('has_memory', False)}")
             return memory_data
         except json.JSONDecodeError:
-            logger.warning(f"Failed to parse memory extraction response as JSON: {response}")
+            logger.warning(f"Failed to parse memory extraction response as JSON: {response_text}")
             return {"has_memory": False}
 
     except Exception as e:
         logger.error(f"Memory extraction failed: {e}")
-        logger.error(f"Full traceback: {traceback.format_exc()}")
+        logger.error(f"Full traceback: {traceback.format_exc()})")
         raise LLMError(f"Failed to extract memory: {e}")

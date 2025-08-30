@@ -1,16 +1,22 @@
-import React, {useEffect, useRef} from 'react';
+import React, {useState, useEffect, useRef} from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {Prism as SyntaxHighlighter} from 'react-syntax-highlighter';
 import {tomorrow} from 'react-syntax-highlighter/dist/esm/styles/prism';
+import MessageMetadata from './MessageMetadata';
 import '../styles/components/ChatWindow.css';
 
 function ChatWindow({messages, username}) {
     const bottomRef = useRef(null);
+    const [visibleMetadataId, setVisibleMetadataId] = useState(null);
 
     useEffect(() => {
         bottomRef.current?.scrollIntoView({behavior: 'smooth'});
     }, [messages]);
+
+    const toggleMetadata = (messageId) => {
+        setVisibleMetadataId(prevId => (prevId === messageId ? null : messageId));
+    };
 
     const formatTime = (timestamp) => {
         if (!timestamp) return '';
@@ -111,11 +117,25 @@ function ChatWindow({messages, username}) {
                                 <>
                                     <i className="bi bi-robot"></i>
                                     <span>AI Assistant</span>
+                                    {msg.metadata && (
+                                        <button className="metadata-toggle-btn" onClick={() => toggleMetadata(msg.id)}>
+                                            <i className={`bi ${visibleMetadataId === msg.id ? 'bi-chevron-up' : 'bi-info-circle'}`}></i>
+                                        </button>
+                                    )}
+                                    {/* Debug: Show if metadata exists */}
+                                    {process.env.NODE_ENV === 'development' && (
+                                        <span style={{fontSize: '0.7rem', color: '#666', marginLeft: '8px'}}>
+                                            {msg.metadata ? `✓meta` : `✗meta`}
+                                        </span>
+                                    )}
                                 </>
                             )}
                         </div>
                         <span className="message-timestamp">{formatTime(msg.created_at)}</span>
                     </div>
+                    {visibleMetadataId === msg.id && msg.metadata && (
+                        <MessageMetadata metadata={msg.metadata} />
+                    )}
                     <div className={`message-content ${!msg.is_bot ? 'user-content' : 'bot-content'}`}>
                         <div
                             className={`message ${!msg.is_bot ? 'user' : 'bot'} ${msg.pending ? 'pending' : ''} ${msg.error ? 'error' : ''}`}>
