@@ -25,6 +25,7 @@ from ..utils.memory_utils import (
 )
 from ..utils.prompts import build_enhanced_prompt, get_system_prompt, validate_mode
 from ..utils.agent_utils import run_agent
+from ..utils.conversation_utils import async_auto_title_conversation
 
 # Configure logging with filename and line numbers
 logging.basicConfig(
@@ -57,7 +58,9 @@ def async_conversation_memory_extraction(user_message_id, ai_message_id, user_id
         extract_and_store_conversation_memory(user_message, ai_message, user)
 
     except Exception as e:
-        logger.error(f"Background conversation memory extraction failed for messages {user_message_id}, {ai_message_id}: {str(e)}")
+        logger.error(
+            f"Background conversation memory extraction failed for messages {user_message_id}, {ai_message_id}: {str(e)}"
+        )
 
 
 def async_memory_extraction(message_id, user_id):
@@ -416,17 +419,32 @@ class MessageListCreateView(APIView):
 
                     # Start background conversation memory extraction for agent mode too
                     memory_thread = Thread(
-                        target=async_conversation_memory_extraction, 
-                        args=(user_msg.id, bot_msg.id, request.user.id)
+                        target=async_conversation_memory_extraction, args=(user_msg.id, bot_msg.id, request.user.id)
                     )
                     memory_thread.daemon = True
                     memory_thread.start()
-                    logger.info(f"[AGENT CONVERSATION MEMORY] Started background extraction for agent message pair {user_msg.id} + {bot_msg.id}")
+                    logger.info(
+                        f"[AGENT CONVERSATION MEMORY] Started background extraction for agent message pair {user_msg.id} + {bot_msg.id}"
+                    )
 
                     conversation.context.update({"last_bot_response": bot_msg.content})
                     conversation.save()
 
                     user_message_serializer = MessageSerializer(user_msg)
+                    # Check if we should auto-title the conversation after 4 messages (agent mode)
+                    message_count = conversation.messages.count()
+                    if message_count >= 3:  # After user -> bot -> user -> bot pattern
+                        logger.info(
+                            f"[AUTO-TITLE] Triggering auto-titling for agent conversation {conversation_id} with {message_count} messages"
+                        )
+                        # Start auto-titling in background to avoid blocking the response
+                        auto_title_thread = Thread(target=async_auto_title_conversation, args=(conversation.id,))
+                        auto_title_thread.daemon = True
+                        auto_title_thread.start()
+                        logger.info(
+                            f"[AUTO-TITLE] Started background auto-titling for agent conversation {conversation_id}"
+                        )
+
                     bot_message_serializer = MessageSerializer(bot_msg)
 
                     return Response(
@@ -472,8 +490,8 @@ class MessageListCreateView(APIView):
                     metadata={
                         "model": model,
                         "mode": mode,
-                        "latency_ms": latency_ms, 
-                        "token_usage": usage, 
+                        "latency_ms": latency_ms,
+                        "token_usage": usage,
                         "used_memories": len(all_memories),
                         "relevant_memories": len(relevant_memories),
                         "conversation_memories": len(conversation_memories),
@@ -498,12 +516,13 @@ class MessageListCreateView(APIView):
 
                 # Start background conversation memory extraction with user + AI message pair
                 memory_thread = Thread(
-                    target=async_conversation_memory_extraction, 
-                    args=(user_msg.id, bot_msg.id, request.user.id)
+                    target=async_conversation_memory_extraction, args=(user_msg.id, bot_msg.id, request.user.id)
                 )
                 memory_thread.daemon = True
                 memory_thread.start()
-                logger.info(f"[CONVERSATION MEMORY] Started background extraction for message pair {user_msg.id} + {bot_msg.id}")
+                logger.info(
+                    f"[CONVERSATION MEMORY] Started background extraction for message pair {user_msg.id} + {bot_msg.id}"
+                )
 
                 # Update conversation context with enhanced information
                 conversation.context = {
@@ -529,6 +548,19 @@ class MessageListCreateView(APIView):
                 conversation.save()
 
                 logger.info(f"[CONVERSATION UPDATE] Updated conversation {conversation_id} context with enhanced stats")
+                # Check if we should auto-title the conversation after 4 messages
+                message_count = conversation.messages.count()
+                if message_count >= 4:  # Auto-title any conversation with 4+ messages that still has default title
+                    logger.info(
+                        f"[AUTO-TITLE] Checking auto-titling for conversation {conversation_id} with {message_count} messages"
+                    )
+                    # Start auto-titling in background to avoid blocking the response
+                    auto_title_thread = Thread(target=async_auto_title_conversation, args=(conversation.id,))
+                    auto_title_thread.daemon = True
+                    auto_title_thread.start()
+                    logger.info(
+                        f"[AUTO-TITLE] Started background auto-titling check for conversation {conversation_id}"
+                    )
 
                 user_message_serializer = MessageSerializer(user_msg)
                 bot_message_serializer = MessageSerializer(bot_msg)
