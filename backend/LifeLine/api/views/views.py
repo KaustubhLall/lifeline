@@ -12,7 +12,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from backend.LifeLine.api.utils.constants import (
+from api.utils.constants import (
     AUTO_TITLE_MIN_MESSAGES,
     MAX_MEMORIES_RELEVANT,
     MIN_SIMILARITY_THRESHOLD,
