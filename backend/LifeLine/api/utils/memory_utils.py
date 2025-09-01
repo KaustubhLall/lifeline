@@ -7,6 +7,17 @@ from django.db import models
 from django.utils import timezone
 
 from ..models.chat import Memory, Message, Conversation
+from ..utils.constants import (
+    DEFAULT_IMPORTANCE_SCORE,
+    DEFAULT_CONFIDENCE_SCORE,
+    DEFAULT_EMBEDDING_DIMENSIONS,
+    MEMORY_SIMILARITY_WEIGHT,
+    MEMORY_IMPORTANCE_WEIGHT,
+    MEMORY_RECENCY_WEIGHT,
+    MEMORY_RECENCY_DAYS_DIVISOR,
+    MEMORY_CONTEXT_SIMILARITY_WEIGHT,
+    MEMORY_IMPORTANCE_CONTEXT_WEIGHT,
+)
 from ..utils.llm import call_llm_embedding, call_llm_memory_extraction, call_llm_conversation_memory_extraction
 
 logger = logging.getLogger(__name__)
@@ -33,15 +44,15 @@ def extract_and_store_conversation_memory(user_message: Message, ai_message: Mes
         Memory object if memory was extracted, None otherwise
     """
     try:
-        logger.info(f"[CONVERSATION MEMORY] Starting extraction for conversation pair: user msg {user_message.id} + AI msg {ai_message.id}")
+        logger.info(
+            f"[CONVERSATION MEMORY] Starting extraction for conversation pair: user msg {user_message.id} + AI msg {ai_message.id}"
+        )
 
         # Extract memory using conversation pair LLM function
         current_date = datetime.now().strftime("%Y-%m-%d")
-        
+
         memory_data = call_llm_conversation_memory_extraction(
-            user_message=user_message.content,
-            ai_response=ai_message.content,
-            current_date=current_date
+            user_message=user_message.content, ai_response=ai_message.content, current_date=current_date
         )
 
         if not memory_data.get("has_memory", False):
@@ -61,7 +72,7 @@ def extract_and_store_conversation_memory(user_message: Message, ai_message: Mes
             "source_ai_message_id": ai_message.id,
             "user_message_length": len(user_message.content),
             "ai_message_length": len(ai_message.content),
-            "embedding_dimensions": len(embedding) if embedding else 0,
+            "embedding_dimensions": len(embedding) if embedding else DEFAULT_EMBEDDING_DIMENSIONS,
             "has_deadline": memory_data.get("has_deadline", False),
             "deadline_date": memory_data.get("deadline_date"),
             "is_actionable": memory_data.get("is_actionable", False),
@@ -81,12 +92,12 @@ def extract_and_store_conversation_memory(user_message: Message, ai_message: Mes
             title=memory_data.get("title", ""),
             memory_type=memory_data.get("memory_type", "personal"),
             tags=tags,
-            importance_score=memory_data.get("importance_score", 0.5),
+            importance_score=memory_data.get("importance_score", DEFAULT_IMPORTANCE_SCORE),
             embedding=embedding,
             source_message=ai_message,  # Use AI message as source since it contains the actionable info
             source_conversation=user_message.conversation,
             is_auto_extracted=True,
-            extraction_confidence=memory_data.get("confidence", 0.0),
+            extraction_confidence=memory_data.get("confidence", DEFAULT_CONFIDENCE_SCORE),
             metadata=metadata,
         )
 
@@ -115,7 +126,9 @@ def extract_and_store_memory(message: Message, user) -> Optional[Memory]:
         Memory object if memory was extracted, None otherwise
     """
     try:
-        logger.info(f"[MEMORY EXTRACTION] Starting extraction for single message {message.id} from user {user.username}")
+        logger.info(
+            f"[MEMORY EXTRACTION] Starting extraction for single message {message.id} from user {user.username}"
+        )
 
         # Extract memory using LLM
         memory_data = call_llm_memory_extraction(message.content)
@@ -135,17 +148,17 @@ def extract_and_store_memory(message: Message, user) -> Optional[Memory]:
             title=memory_data.get("title", ""),
             memory_type=memory_data.get("memory_type", "personal"),
             tags=memory_data.get("tags", []),
-            importance_score=memory_data.get("importance_score", 0.5),
+            importance_score=memory_data.get("importance_score", DEFAULT_IMPORTANCE_SCORE),
             embedding=embedding,
             source_message=message,
             source_conversation=message.conversation,
             is_auto_extracted=True,
-            extraction_confidence=memory_data.get("confidence", 0.0),
+            extraction_confidence=memory_data.get("confidence", DEFAULT_CONFIDENCE_SCORE),
             metadata={
                 "extraction_model": "gpt-4o-mini",
                 "extracted_at": str(timezone.now()),
                 "source_message_length": len(message.content),
-                "embedding_dimensions": len(embedding) if embedding else 0,
+                "embedding_dimensions": len(embedding) if embedding else DEFAULT_EMBEDDING_DIMENSIONS,
             },
         )
 
@@ -202,11 +215,11 @@ def get_relevant_memories(user, query: str, limit: int = 5, min_similarity: floa
                     continue
 
                 # Calculate composite score: similarity + importance + recency
-                recency_score = min(1.0, (timezone.now() - memory.updated_at).days / 30.0)
+                recency_score = min(1.0, (timezone.now() - memory.updated_at).days / MEMORY_RECENCY_DAYS_DIVISOR)
                 composite_score = (
-                    similarity * 0.6  # 60% semantic similarity
-                    + memory.importance_score * 0.3  # 30% importance
-                    + (1.0 - recency_score) * 0.1  # 10% recency (newer is better)
+                    similarity * MEMORY_SIMILARITY_WEIGHT  # semantic similarity
+                    + memory.importance_score * MEMORY_IMPORTANCE_WEIGHT  # importance
+                    + (1.0 - recency_score) * MEMORY_RECENCY_WEIGHT  # recency (newer is better)
                 )
 
                 relevant_memories.append(
@@ -406,7 +419,9 @@ def rerank_memories_by_context(memories: List[Memory], conversation_context: str
                 context_similarity = cosine_similarity(context_embedding, memory.embedding)
 
                 # Combine with existing importance
-                combined_score = (context_similarity * 0.7) + (memory.importance_score * 0.3)
+                combined_score = (context_similarity * MEMORY_CONTEXT_SIMILARITY_WEIGHT) + (
+                    memory.importance_score * MEMORY_IMPORTANCE_CONTEXT_WEIGHT
+                )
                 memory_scores.append((memory, combined_score))
 
         # Sort by combined score
