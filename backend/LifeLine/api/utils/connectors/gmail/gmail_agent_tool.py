@@ -1,6 +1,8 @@
 import asyncio
 import json
 import logging
+import time
+import re
 from typing import List, Dict, Any
 
 from langchain_core.tools import tool
@@ -140,6 +142,7 @@ class GmailAgentTool:
                 return json.dumps({"error": "Gmail client not initialized"})
 
             # Fetch emails sequentially to avoid httplib2 concurrency issues
+            t_start = time.time()
             try:
                 loop = asyncio.get_event_loop()
             except RuntimeError:
@@ -175,15 +178,22 @@ class GmailAgentTool:
                 }
 
             compact = [compact_email(e) for e in emails]
+            # Precompute simple input stats (by sender) for UI/agent telemetry
+            sender_counts = {}
+            for e in compact:
+                sender = (e.get("from") or "").strip()
+                sender_counts[sender] = sender_counts.get(sender, 0) + 1
 
-            # Tool-level summarization using a configurable small model to keep context small for the agent
-            chosen_model = model or EMAIL_SUMMARY_MODEL_DEFAULT
+            # Tool-level summarization model: FORCE our backend default to avoid accidental overrides
+            # that could pick legacy 8k models and cause context overflows.
+            chosen_model = EMAIL_SUMMARY_MODEL_DEFAULT
             chosen_temp = EMAIL_SUMMARY_TEMPERATURE_DEFAULT if temperature is None else temperature
             llm = ChatOpenAI(model=chosen_model, temperature=chosen_temp)
             system = (
                 "You extract structured facts from emails about utility bills and actions. "
-                "For each email, output a JSON object with: id, issuer, subject, from, date, amount, due_date, billing_period, "
-                "action_required (yes/no), action_items (list), and a short evidence string (quote or phrase). Keep evidence short."
+                "Return a JSON ARRAY of objects (one per email) with fields: id, issuer, subject, from, date, amount, due_date, "
+                "billing_period, action_required (yes/no), action_items (list), and a short evidence string (quote or phrase). "
+                "Only output valid JSON, no commentary. Keep evidence short."
             )
             user_prompt = (
                 "Extract structured facts from the following emails. If a field is unknown, set it to null. "
@@ -193,10 +203,61 @@ class GmailAgentTool:
             try:
                 resp = llm.invoke([{"role": "system", "content": system}, {"role": "user", "content": user_prompt}])
                 content = resp.content if hasattr(resp, "content") else str(resp)
-                # Wrap result in a JSON envelope
-                return json.dumps({"extracted": content, "count": len(compact)})
+
+                # Try to parse JSON strictly; if it fails, try to extract the first JSON array/object
+                parsed = None
+                try:
+                    parsed = json.loads(content)
+                except Exception:
+                    try:
+                        match = re.search(r"(\[.*\]|\{.*\})", content, re.DOTALL)
+                        if match:
+                            parsed = json.loads(match.group(1))
+                    except Exception:
+                        parsed = None
+
+                duration_ms = int((time.time() - t_start) * 1000)
+                usage = getattr(resp, "usage_metadata", None)
+                metrics = {
+                    "api_calls": len(message_ids),
+                    "duration_ms": duration_ms,
+                    "model": chosen_model,
+                    "temperature": chosen_temp,
+                    "llm_calls": 1,
+                }
+                if isinstance(usage, dict):
+                    # Keys commonly present: input_tokens, output_tokens, total_tokens
+                    metrics["usage"] = usage
+
+                if isinstance(parsed, list):
+                    return json.dumps({
+                        "extracted": parsed,
+                        "input_count": len(compact),
+                        "extracted_count": len(parsed),
+                        "processed_ids": [e.get("id") for e in compact],
+                        "input_stats": {"by_sender": sender_counts},
+                        "metrics": metrics,
+                    })
+                elif isinstance(parsed, dict) and "extracted" in parsed:
+                    # If model returned an object with 'extracted'
+                    parsed["metrics"] = metrics
+                    parsed.setdefault("input_count", len(compact))
+                    parsed.setdefault("processed_ids", [e.get("id") for e in compact])
+                    parsed.setdefault("input_stats", {"by_sender": sender_counts})
+                    return json.dumps(parsed)
+                else:
+                    # Fallback to raw content
+                    return json.dumps({
+                        "extracted_raw": content,
+                        "input_count": len(compact),
+                        "processed_ids": [e.get("id") for e in compact],
+                        "input_stats": {"by_sender": sender_counts},
+                        "metrics": metrics,
+                        "parsed": False,
+                    })
             except Exception as e:
                 logger.error(f"[GmailAgentTool] Summarization error: {e}")
-                return json.dumps({"error": str(e), "count": len(compact)})
+                duration_ms = int((time.time() - t_start) * 1000)
+                return json.dumps({"error": str(e), "input_count": len(compact), "metrics": {"duration_ms": duration_ms}})
 
         return [search_emails, read_email, send_email, read_emails_by_id, summarize_emails_by_id]

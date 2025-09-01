@@ -97,9 +97,10 @@
     transition: opacity 0.2s ease-in-out;
 }
 
-.message-container:hover .message-actions {
-    opacity: 1;
-}
+.message-header-right { display: flex; align-items: center; gap: 8px; margin-left: 16px; }
+.message-header-left { display: flex; align-items: center; }
+.message-container:hover .message-actions { opacity: 1; }
+.message-actions { opacity: 1; gap: 4px; }
 
 .message-action-btn {
     background: none;
@@ -163,6 +164,15 @@
 .message-timestamp {
     font-size: 0.75rem;
     color: var(--text-muted);
+}
+
+.message-meta-count {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    padding: 2px 6px;
+    border-radius: 6px;
 }
 
 .message-header.user .message-timestamp {

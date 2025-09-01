@@ -101,21 +101,35 @@ SYSTEM_PROMPT_BUFFER_TOKENS = 1000
 # =============================================================================
 
 # Default model and temperature for tool-level email summarization
-EMAIL_SUMMARY_MODEL_DEFAULT = "gpt-4o-mini"
+# EMAIL_SUMMARY_MODEL_DEFAULT: Model used by Gmail summarization tool (hardcoded to avoid context errors)
+# Should be a high-context model (128k+) to handle large email batches without truncation
+EMAIL_SUMMARY_MODEL_DEFAULT = "gpt-4.1-nano"
+# EMAIL_SUMMARY_TEMPERATURE_DEFAULT: Temperature for email summarization (0.0 = deterministic, factual extraction)
 EMAIL_SUMMARY_TEMPERATURE_DEFAULT = 0.0
 
 # Preview lengths used when compressing email content before summarization
-EMAIL_BODY_PREVIEW_CHARS = 1200
-EMAIL_SNIPPET_PREVIEW_CHARS = 180
+# EMAIL_BODY_PREVIEW_CHARS: Max characters from email body to include in summarization input
+# Larger values = more context but higher token usage. Balance between detail and efficiency.
+EMAIL_BODY_PREVIEW_CHARS = 5000
+# EMAIL_SNIPPET_PREVIEW_CHARS: Max characters from email snippet/preview text
+# Used as fallback when full body is unavailable or for quick previews
+EMAIL_SNIPPET_PREVIEW_CHARS = 500
 
 # Batch size guidance for processing email IDs
+# GMAIL_SUMMARY_BATCH_SIZE: Recommended number of emails to process in a single summarization call
+# Higher values = more efficient but risk hitting token limits. Lower values = safer but more API calls.
 GMAIL_SUMMARY_BATCH_SIZE = 12
 
 # Default max results for Gmail search
+# GMAIL_SEARCH_DEFAULT_MAX_RESULTS: Default number of emails returned by search_emails tool
+# Prevents overwhelming responses while allowing user to request more if needed
 GMAIL_SEARCH_DEFAULT_MAX_RESULTS = 5
 
 # Gmail API retry/backoff settings to mitigate transient SSL/transport errors
+# GMAIL_API_MAX_RETRIES: Number of retry attempts for failed Gmail API calls
+# Helps handle transient network issues and rate limiting
 GMAIL_API_MAX_RETRIES = 3
+# GMAIL_API_RETRY_BASE_SECONDS: Base delay between retry attempts (exponential backoff)
 GMAIL_API_RETRY_BASE_SECONDS = 0.3
 
 # =============================================================================
@@ -157,6 +171,12 @@ AGENT_RESUMMARY_THRESHOLD_TOKENS = 50000
 # Purpose: Limits concurrent API calls to prevent rate limiting and memory issues
 # Balance: High enough for speed, low enough to avoid overwhelming the API
 AGENT_MAX_PARALLEL_CHUNKS = 10
+
+# Concurrency detection tolerance
+# CONCURRENCY_TOLERANCE: Allowed relative error when comparing step duration
+# to sum/max of per-tool latencies to classify sync/async execution.
+# Example: 0.2 allows +/-20% mismatch and still count as equal.
+CONCURRENCY_TOLERANCE = 0.2
 
 # Memory scoring algorithm weights
 MEMORY_SIMILARITY_WEIGHT = 0.6  # Weight for semantic similarity in memory scoring

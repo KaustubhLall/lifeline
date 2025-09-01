@@ -444,24 +444,63 @@ class GmailMCPServer:
 
     def _parse_email_data(self, msg):
         """Helper to parse email data from raw message."""
-        email_data = {'id': msg['id'], 'threadId': msg['threadId'], 'snippet': msg['snippet']}
-        headers = msg['payload']['headers']
+        email_data = {
+            'id': msg.get('id', ''),
+            'threadId': msg.get('threadId', ''),
+            'snippet': msg.get('snippet', ''),
+        }
+
+        payload = msg.get('payload', {}) or {}
+        headers = payload.get('headers', []) or []
         for header in headers:
-            if header['name'] == 'Subject':
-                email_data['subject'] = header['value']
-            if header['name'] == 'From':
-                email_data['from'] = header['value']
-            if header['name'] == 'Date':
-                email_data['date'] = header['value']
+            name = header.get('name')
+            if name == 'Subject':
+                email_data['subject'] = header.get('value', '')
+            if name == 'From':
+                email_data['from'] = header.get('value', '')
+            if name == 'Date':
+                email_data['date'] = header.get('value', '')
 
-        # Get body content
-        if 'parts' in msg['payload']:
-            parts = msg['payload']['parts']
-            data = parts[0]['body']['data']
-        else:
-            data = msg['payload']['body']['data']
+        # Extract body content safely. Prefer first text/plain, then text/html. Fallback to empty string.
+        def find_body(p):
+            if not isinstance(p, dict):
+                return None
+            body = p.get('body', {}) or {}
+            data = body.get('data')
+            if data:
+                return data
+            parts = p.get('parts') or []
+            # Try to find text/plain first
+            for part in parts:
+                if part.get('mimeType', '').startswith('text/plain'):
+                    b = part.get('body', {}) or {}
+                    if b.get('data'):
+                        return b.get('data')
+            # Then any text/*
+            for part in parts:
+                if part.get('mimeType', '').startswith('text/'):
+                    b = part.get('body', {}) or {}
+                    if b.get('data'):
+                        return b.get('data')
+            # Recurse into subparts
+            for part in parts:
+                found = find_body(part)
+                if found:
+                    return found
+            return None
 
-        email_data['body'] = base64.urlsafe_b64decode(data.encode('ASCII')).decode('utf-8')
+        data = find_body(payload)
+        body_text = ''
+        if data:
+            try:
+                body_text = base64.urlsafe_b64decode(data.encode('ASCII')).decode('utf-8', errors='replace')
+            except Exception:
+                try:
+                    body_text = base64.b64decode(data).decode('utf-8', errors='replace')
+                except Exception:
+                    body_text = ''
+
+        email_data['body'] = body_text
         return email_data
 
     async def list_labels(self) -> Dict[str, Any]:

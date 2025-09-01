@@ -17,6 +17,7 @@ from .constants import (
     AGENT_RESUMMARY_THRESHOLD_TOKENS,
     AGENT_MAX_PARALLEL_CHUNKS,
     AGENT_MESSAGE_TRUNCATE_TOKENS,
+    CONCURRENCY_TOLERANCE,
 )
 from .prompts import get_system_prompt
 from .token_utils import create_token_manager
@@ -213,7 +214,8 @@ def run_agent(
                         f"1. All charges/amounts with dates (create a table if multiple)\n"
                         f"2. Action items and deadlines\n"
                         f"3. Key contacts and important information\n"
-                        f"4. Summary statistics and totals\n\n"
+                        f"4. Summary statistics and totals\n"
+                        f"5. If tool output includes telemetry (e.g., input_count, extracted_count, metrics.usage tokens, model, duration_ms), include a short header summarizing: number of emails processed, model, and token usage.\n\n"
                         f"Chunk summaries:\n{combined_summary}\n\n"
                         f"Provide a well-organized final summary."
                     )
@@ -248,7 +250,8 @@ def run_agent(
                 minimal_system_content = (
                     "You are LifeLine, a helpful AI assistant. "
                     "Analyze the provided email data summary and respond to the user's request. "
-                    "Focus on actionable information, charges, dates, and key details."
+                    "Focus on actionable information, charges, dates, and key details. "
+                    "If the tool output JSON includes telemetry (input_count, extracted_count, metrics with usage tokens/model), briefly state these at the top of your answer."
                 )
                 minimal_system_msg = state["messages"][0].__class__(content=minimal_system_content)
                 
@@ -306,7 +309,8 @@ def run_agent(
                     f"1. Key charges/amounts with dates\n"
                     f"2. Action items and deadlines\n"
                     f"3. Important contacts or details\n"
-                    f"4. Summary statistics\n\n"
+                    f"4. Summary statistics\n"
+                    f"5. If the tool output contains telemetry (input_count, extracted_count, metrics.usage tokens, model), start with a one-line header capturing those.\n\n"
                     f"Tool output:\n{last_message.content}\n\n"
                     f"Provide a structured, comprehensive summary."
                 )
@@ -324,7 +328,8 @@ def run_agent(
                     # Create truly minimal context for focused summary
                     minimal_system_content = (
                         "You are LifeLine, a helpful AI assistant. "
-                        "Analyze the provided email data summary and respond to the user's request."
+                        "Analyze the provided email data summary and respond to the user's request. "
+                        "Include any available telemetry from the tool output (counts/tokens/model) as a short header."
                     )
                     minimal_system_msg = state["messages"][0].__class__(content=minimal_system_content)
                     
@@ -474,7 +479,9 @@ def run_agent(
                                     "tool_name": tc.get("name"),
                                     "tool_args": tc.get("args"),
                                     "node": key,
+                                    # Initial placeholder; will be updated with metrics-derived latency when available
                                     "latency_ms": step_duration,
+                                    "tool_call_id": tc.get("id"),
                                 }
                             )
                     else:
@@ -502,6 +509,74 @@ def run_agent(
 
                     if tokens_found:
                         logger.info(f"[LangGraph Agent] Captured tokens for step {key}: {step_info['tokens']}")
+
+                # If this is a ToolMessage, capture tool identity and parse metrics to enrich step/tool info
+                if step_info.get("message_type") == "ToolMessage":
+                    # Capture tool identity if available
+                    if hasattr(last_message, "name") and last_message.name:
+                        step_info["tool_name"] = last_message.name
+                    if hasattr(last_message, "tool_call_id") and last_message.tool_call_id:
+                        step_info["tool_call_id"] = last_message.tool_call_id
+                    # Count concurrent calls of the same tool name (helps UI show "(N async calls)")
+                    try:
+                        tn = step_info.get("tool_name")
+                        if tn:
+                            step_info["tool_calls_count_by_name"] = sum(1 for tc in tool_calls if tc.get("tool_name") == tn)
+                    except Exception:
+                        pass
+
+                if step_info.get("message_type") == "ToolMessage" and hasattr(last_message, "content") and last_message.content:
+                    try:
+                        import json
+                        content_str = last_message.content
+                        parsed = None
+                        try:
+                            parsed = json.loads(content_str)
+                        except Exception:
+                            # try to find first JSON object/array
+                            import re
+                            m = re.search(r"(\{.*\}|\[.*\])", content_str, re.DOTALL)
+                            if m:
+                                parsed = json.loads(m.group(1))
+
+                        if isinstance(parsed, dict):
+                            metrics = parsed.get("metrics")
+                            if isinstance(metrics, dict):
+                                step_info["tool_metrics"] = metrics
+                                usage = metrics.get("usage")
+                                if isinstance(usage, dict):
+                                    step_info["tokens"] = {
+                                        "input": usage.get("input_tokens", 0),
+                                        "output": usage.get("output_tokens", 0),
+                                        "total": usage.get("total_tokens", 0),
+                                    }
+                                # Attach metrics to matching tool_call by id
+                                tc_id = getattr(last_message, "tool_call_id", None)
+                                if tc_id:
+                                    for tc in tool_calls:
+                                        if tc.get("tool_call_id") == tc_id:
+                                            tc["metrics"] = metrics
+                                            if isinstance(usage, dict):
+                                                tc["tokens"] = {
+                                                    "input": usage.get("input_tokens", 0),
+                                                    "output": usage.get("output_tokens", 0),
+                                                    "total": usage.get("total_tokens", 0),
+                                                }
+                                            # Prefer metrics-provided latency for accuracy (actual API call duration)
+                                            try:
+                                                m_latency = metrics.get("duration_ms") or metrics.get("latency_ms")
+                                                if m_latency is not None:
+                                                    tc["latency_ms"] = int(m_latency)
+                                            except Exception:
+                                                pass
+                                            # Attach this tool call to the current step index (before appending this step)
+                                            try:
+                                                tc["step_index"] = len(step_details)
+                                            except Exception:
+                                                pass
+                                            break
+                    except Exception as parse_e:
+                        logger.debug(f"[LangGraph Agent] Could not parse ToolMessage metrics: {parse_e}")
 
                 # Always append step info, even if no messages
                 step_details.append(step_info)
@@ -545,6 +620,129 @@ def run_agent(
         latency_ms = round((time.time() - start_time) * 1000)
         logger.info(f"[LangGraph Agent] Success for user {user.username} in {latency_ms}ms")
 
+        # Compute token breakdowns
+        total_tokens_all = 0
+        agent_tokens = 0
+        tool_tokens = 0
+        steps_total_duration_ms = 0
+        tool_step_tokens_total = 0
+        
+        logger.info(f"[LangGraph Agent] Processing {len(step_details)} steps for token breakdown")
+        for i, s in enumerate(step_details):
+            t = (s.get("tokens") or {}).get("total", 0)
+            total_tokens_all += t
+            node = s.get("node") or ""
+            mt = (s.get("message_type") or "").lower()
+            steps_total_duration_ms += int(s.get("duration_ms") or 0)
+            
+            logger.info(f"[LangGraph Agent] Step {i}: node='{node}', message_type='{mt}', tokens={t}")
+            
+            # More robust token attribution - check both node and message_type
+            is_agent_step = (node == "agent" or "agent" in node.lower() or 
+                           mt in ("aimessage", "ai") or "ai" in mt)
+            is_tool_step = (node == "tools" or "tool" in node.lower() or 
+                          mt in ("toolmessage", "tool", "tools") or "tool" in mt)
+            
+            if is_agent_step and not is_tool_step:
+                agent_tokens += t
+                logger.info(f"[LangGraph Agent] Added {t} tokens to agent_tokens (total: {agent_tokens})")
+            elif is_tool_step:
+                tool_tokens += t
+                tool_step_tokens_total += t
+                logger.info(f"[LangGraph Agent] Added {t} tokens to tool_tokens (total: {tool_tokens})")
+            else:
+                logger.info(f"[LangGraph Agent] Step {i} tokens not attributed: node='{node}', mt='{mt}', tokens={t}")
+                # Fallback: if it has tokens but doesn't match our patterns, add to agent
+                if t > 0:
+                    agent_tokens += t
+                    logger.info(f"[LangGraph Agent] Fallback: Added {t} tokens to agent_tokens (total: {agent_tokens})")
+
+        # Log final token breakdown totals
+        logger.info(f"[LangGraph Agent] Final token breakdown: total={total_tokens_all}, agent={agent_tokens}, tool={tool_tokens}")
+        logger.info(f"[LangGraph Agent] Token verification: agent+tool={agent_tokens + tool_tokens}, should equal total={total_tokens_all}")
+
+        # Aggregate per-tool tokens using tool_calls entries and infer concurrency
+        tools_token_breakdown = []
+        tools_total_duration_ms = 0
+
+        # Group calls by tool name and by step index
+        by_tool = {}
+        by_step = {}
+        for idx, tc in enumerate(tool_calls):
+            name = tc.get("tool_name") or "tool"
+            by_tool.setdefault(name, []).append(tc)
+            step_idx = tc.get("step_index")
+            if step_idx is not None:
+                by_step.setdefault(step_idx, []).append(tc)
+            # Sum total tools latency regardless of grouping
+            try:
+                tools_total_duration_ms += int(tc.get("latency_ms") or 0)
+            except Exception:
+                pass
+
+        # Infer concurrency per step comparing step duration vs sum/max of call latencies
+        for s_idx, calls in by_step.items():
+            try:
+                step = step_details[s_idx]
+            except Exception:
+                continue
+            step_dur = int(step.get("duration_ms") or 0)
+            lats = [int(c.get("latency_ms") or 0) for c in calls]
+            sum_lat = sum(lats)
+            max_lat = max(lats) if lats else 0
+            # Determine concurrency type
+            def approx(a, b):
+                if b == 0:
+                    return a == 0
+                return abs(a - b) / max(b, 1) <= CONCURRENCY_TOLERANCE
+            if len(lats) <= 1:
+                ctype = "single"
+            elif approx(step_dur, sum_lat):
+                ctype = "sync"
+            elif approx(step_dur, max_lat):
+                ctype = "async"
+            else:
+                ctype = "mixed"
+            step["concurrency_type"] = ctype
+            step["tool_calls_in_step"] = len(lats)
+
+        # Build per-tool breakdown with concurrency summary across steps
+        for name, calls in by_tool.items():
+            tokens_total = 0
+            duration_ms_total = 0
+            api_calls = len(calls)
+            # track step-level types for this tool
+            step_types = set()
+            for c in calls:
+                tokens_total += (c.get("tokens") or {}).get("total", 0)
+                try:
+                    duration_ms_total += int(c.get("latency_ms") or 0)
+                except Exception:
+                    pass
+                sidx = c.get("step_index")
+                if sidx is not None and 0 <= sidx < len(step_details):
+                    stype = step_details[sidx].get("concurrency_type")
+                    if stype:
+                        step_types.add(stype)
+
+            if "async" in step_types and ("sync" in step_types or "mixed" in step_types):
+                overall = "mixed"
+            elif len(step_types) == 1:
+                overall = next(iter(step_types))
+            elif len(step_types) == 0:
+                overall = "single" if api_calls == 1 else "unknown"
+            else:
+                # multiple but consistent without async+sync mixture
+                overall = next(iter(step_types))
+
+            tools_token_breakdown.append({
+                "tool_name": name,
+                "tokens": tokens_total,
+                "api_calls": api_calls,
+                "duration_ms_total": duration_ms_total,
+                "concurrency": overall,
+            })
+
         return {
             "response": final_response,
             "metadata": {
@@ -552,8 +750,16 @@ def run_agent(
                 "tool_calls": tool_calls,
                 "step_details": step_details,
                 "total_steps": len(step_details),
-                # Calculate total tokens across all steps
-                "total_tokens": sum(step.get("tokens", {}).get("total", 0) for step in step_details),
+                # Maintain old total_tokens for backward compat
+                "total_tokens": total_tokens_all,
+                # Total of durations in step_details (can differ slightly from wall-clock latency)
+                "steps_total_duration_ms": steps_total_duration_ms,
+                "tools_total_duration_ms": tools_total_duration_ms,
+                # New breakdowns
+                "agent_tokens": agent_tokens,
+                "tool_tokens": tool_tokens,
+                "tool_step_tokens_total": tool_step_tokens_total,
+                "tools_token_breakdown": tools_token_breakdown,
             },
         }
 

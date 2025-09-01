@@ -188,6 +188,14 @@ function ChatWindow({messages, username, onQuickAction, onOpenSettings}) {
                                         </>
                                     )}
                                 </div>
+                            </div>
+                            <div className="message-header-right">
+                                <span className="message-timestamp">{formatTime(msg.created_at)}</span>
+                                {process.env.NODE_ENV === 'development' && msg.is_bot && (
+                                    <span className="message-meta-count" title="Number of metadata fields">
+                                        {msg.metadata ? `metadata: ${Object.keys(msg.metadata).length}` : 'no metadata'}
+                                    </span>
+                                )}
                                 {msg.is_bot && (
                                     <div className="message-actions">
                                         <button className="message-action-btn" onClick={(e) => handleCopyMessage(msg.content, e)} title="Copy message">
@@ -199,13 +207,6 @@ function ChatWindow({messages, username, onQuickAction, onOpenSettings}) {
                                     </div>
                                 )}
                             </div>
-                            <span className="message-timestamp">{formatTime(msg.created_at)}</span>
-                            {/* Debug: Show metadata status */}
-                            {process.env.NODE_ENV === 'development' && msg.is_bot && (
-                                <span style={{fontSize: '0.6rem', color: '#666', marginLeft: '4px'}}>
-                                    {msg.metadata ? `✓(${Object.keys(msg.metadata).length})` : '✗'}
-                                </span>
-                            )}
                         </div>
                         {visibleMetadataId === msg.id && (
                             <MessageMetadata metadata={msg.metadata || {}} onOpenSettings={onOpenSettings} />
