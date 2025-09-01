@@ -10,6 +10,16 @@ from typing import Optional
 from openai import OpenAI
 from openai import OpenAIError
 
+from ..utils.constants import (
+    DEFAULT_MODEL,
+    DEFAULT_TEMPERATURE,
+    EMBEDDING_DEFAULT_MODEL,
+    MS_CONVERSION_FACTOR,
+    AUDIO_SEEK_END_POSITION,
+    TTS_DEFAULT_MODEL,
+    TTS_DEFAULT_VOICE,
+)
+
 # Configure logging with filename and line numbers
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s"
@@ -64,7 +74,7 @@ def _log_call_info(func_name: str, **kwargs):
     logger.info(f"[{filename}:{line_number}] Calling {func_name} with params: {kwargs}")
 
 
-def call_llm_text(prompt: str, model: str = "gpt-4.1-nano", temperature: float = 0.0) -> dict:
+def call_llm_text(prompt: str, model: str = DEFAULT_MODEL, temperature: float = DEFAULT_TEMPERATURE) -> dict:
     """
     Call the LLM to generate text response.
 
@@ -94,7 +104,7 @@ def call_llm_text(prompt: str, model: str = "gpt-4.1-nano", temperature: float =
             temperature=temperature,
         )
         end_time = time.time()
-        latency_ms = round((end_time - start_time) * 1000)
+        latency_ms = round((end_time - start_time) * MS_CONVERSION_FACTOR)
 
         response_text = response.choices[0].message.content
         token_usage = response.usage
@@ -193,7 +203,7 @@ def call_llm_transcribe_memory(audio_file, model: str = "gpt-4o-mini-transcribe"
     try:
         # Get file size if possible
         current_pos = audio_file.tell()
-        audio_file.seek(0, 2)  # Seek to end
+        audio_file.seek(0, AUDIO_SEEK_END_POSITION)  # Seek to end
         file_size = audio_file.tell()
         audio_file.seek(current_pos)  # Reset position
 
@@ -214,9 +224,8 @@ def call_llm_transcribe_memory(audio_file, model: str = "gpt-4o-mini-transcribe"
         raise AudioProcessingError(f"Failed to transcribe audio: {e}")
 
 
-def call_llm_TTS(text: str, model: str = "tts-1", voice: str = "alloy") -> Optional[bytes]:
+def call_llm_TTS(text: str, model: str = TTS_DEFAULT_MODEL, voice: str = TTS_DEFAULT_VOICE) -> Optional[bytes]:
     """
-    Convert text to speech.
 
     Args:
         text: The text to convert
@@ -246,7 +255,7 @@ def call_llm_TTS(text: str, model: str = "tts-1", voice: str = "alloy") -> Optio
         raise AudioProcessingError(f"Failed to convert text to speech: {e}")
 
 
-def call_llm_embedding(text: str, model: str = "text-embedding-3-small") -> list:
+def call_llm_embedding(text: str, model: str = EMBEDDING_DEFAULT_MODEL) -> list:
     """
     Generate embeddings for text using OpenAI's embedding API.
 

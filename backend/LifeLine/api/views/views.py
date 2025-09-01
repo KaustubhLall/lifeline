@@ -18,6 +18,14 @@ from backend.LifeLine.api.utils.constants import (
     MIN_SIMILARITY_THRESHOLD,
     MIN_AUDIO_SIZE_BYTES,
     MAX_HISTORY_TOKENS,
+    DEFAULT_MODEL,
+    DEFAULT_CONVERSATIONAL_MODE,
+    DEFAULT_TEMPERATURE,
+    MAX_MEMORIES_CONVERSATION,
+    DEBUG_PREVIEW_CHARS,
+    LOG_MESSAGE_PREVIEW_CHARS,
+    AGENT_RESPONSE_PREVIEW_CHARS,
+    DEFAULT_PAGE_NUMBER,
 )
 from ..models.chat import Conversation, Message, MessageNote, Memory, PromptDebug
 from ..serializers import MemorySerializer, MemoryCreateSerializer, MessageSerializer
@@ -119,8 +127,8 @@ class ConversationListCreateView(APIView):
 
         try:
             title = request.data.get("title", "")
-            model = request.data.get("model", "gpt-4.1-nano")
-            mode = request.data.get("mode", "conversational")
+            model = request.data.get("model", DEFAULT_MODEL)
+            mode = request.data.get("mode", DEFAULT_CONVERSATIONAL_MODE)
 
             # Create new conversation
             conversation = Conversation.objects.create(
@@ -241,9 +249,9 @@ class MessageListCreateView(APIView):
         try:
             conversation = get_object_or_404(Conversation, id=conversation_id, user=request.user)
             user_message = request.data.get("content")
-            model = request.data.get("model", "gpt-4.1-nano")
-            mode = request.data.get("mode", "conversational")
-            temperature = request.data.get("temperature", 0.2)
+            model = request.data.get("model", DEFAULT_MODEL)
+            mode = request.data.get("mode", DEFAULT_CONVERSATIONAL_MODE)
+            temperature = request.data.get("temperature", DEFAULT_TEMPERATURE)
 
             logger.info(
                 f"Processing message for conversation {conversation_id} - User: {request.user.username}, Model: {model}, Mode: {mode}, Temp: {temperature}, Length: {len(user_message) if user_message else 0}"
@@ -256,7 +264,9 @@ class MessageListCreateView(APIView):
             logger.info(f"[ENHANCED RAG] Starting enhanced conversation processing for user {request.user.username}")
 
             # Get relevant memories using enhanced RAG
-            logger.info(f"[ENHANCED RAG] Retrieving relevant memories for query: '{user_message[:100]}...'")
+            logger.info(
+                f"[ENHANCED RAG] Retrieving relevant memories for query: '{user_message[:LOG_MESSAGE_PREVIEW_CHARS]}...'"
+            )
             relevant_memories = get_relevant_memories(
                 user=request.user,
                 query=user_message,
@@ -265,7 +275,9 @@ class MessageListCreateView(APIView):
             )
 
             # Get conversation-specific memories
-            conversation_memories = get_conversation_memories(user=request.user, conversation=conversation, limit=3)
+            conversation_memories = get_conversation_memories(
+                user=request.user, conversation=conversation, limit=MAX_MEMORIES_CONVERSATION
+            )
 
             # Combine and deduplicate memories
             all_memories = list({m.id: m for m in (relevant_memories + conversation_memories)}.values())
@@ -320,7 +332,7 @@ class MessageListCreateView(APIView):
             )
 
             logger.info(f"[PROMPT BUILDING] Enhanced prompt built - Total length: {len(enhanced_prompt)} characters")
-            logger.debug(f"[PROMPT BUILDING] Final prompt preview: {enhanced_prompt[:500]}...")
+            logger.debug(f"[PROMPT BUILDING] Final prompt preview: {enhanced_prompt[:DEBUG_PREVIEW_CHARS]}...")
 
             # Create user message with full prompt stored for debugging
             user_msg = Message.objects.create(
@@ -353,7 +365,7 @@ class MessageListCreateView(APIView):
             memory_context = generate_memory_context(all_memories)
             from ..utils.prompts import format_conversation_history
 
-            conversation_history_text = format_conversation_history(message_history, 10000)
+            conversation_history_text = format_conversation_history(message_history, MAX_HISTORY_TOKENS)
 
             logger.info(
                 f"[DEBUG PREP] System prompt length: {len(system_prompt)}, Memory context length: {len(memory_context)}, History length: {len(conversation_history_text)}"
@@ -398,7 +410,9 @@ class MessageListCreateView(APIView):
                     final_response = agent_result["response"]
                     agent_metadata = agent_result["metadata"]
 
-                    logger.info(f"[AGENT MODE] Agent finished with response: {final_response[:200]}...")
+                    logger.info(
+                        f"[AGENT MODE] Agent finished with response: {final_response[:AGENT_RESPONSE_PREVIEW_CHARS]}..."
+                    )
 
                     # Create the bot message with the final answer
                     bot_msg = Message.objects.create(
@@ -611,7 +625,7 @@ class MemoryListCreateView(APIView):
 
         try:
             # Get pagination parameters
-            page = int(request.query_params.get("page", 1))
+            page = int(request.query_params.get("page", DEFAULT_PAGE_NUMBER))
             page_size = int(request.query_params.get("page_size", 20))
             memory_type = request.query_params.get("type")
             search_query = request.query_params.get("search")

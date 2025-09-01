@@ -2,6 +2,15 @@ import logging
 from datetime import datetime
 from typing import List, Dict
 
+from ..utils.constants import (
+    MAX_MEMORIES_IN_CONTEXT,
+    MAX_MEMORY_TITLE_CHARS,
+    MAX_MEMORY_DISPLAY_CHARS,
+    MEMORY_TRUNCATE_CHARS,
+    CONVERSATION_HISTORY_RECENT_LIMIT,
+    ENHANCED_PROMPT_HISTORY_TOKENS,
+)
+
 logger = logging.getLogger(__name__)
 
 # Base system prompts for different modes
@@ -208,19 +217,19 @@ def format_memory_context(memories: List[Dict], context_type: str = "personal_co
         )
 
         # Group similar memories and create concise summaries
-        for memory in sorted_memories[:8]:  # Limit to top 8 most relevant
+        for memory in sorted_memories[:MAX_MEMORIES_IN_CONTEXT]:  # Limit to top memories
             content = memory.get("content", "").strip()
             title = memory.get("title", "").strip()
 
             # Create concise memory entry
-            if title and len(title) < 50:
+            if title and len(title) < MAX_MEMORY_TITLE_CHARS:
                 memory_text = f"{title}: {content}"
             else:
                 memory_text = content
 
-            # Keep it concise - max 100 chars per memory
-            if len(memory_text) > 100:
-                memory_text = memory_text[:97] + "..."
+            # Keep it concise - max chars per memory
+            if len(memory_text) > MAX_MEMORY_DISPLAY_CHARS:
+                memory_text = memory_text[:MEMORY_TRUNCATE_CHARS] + "..."
 
             formatted_memories.append(memory_text)
 
@@ -306,7 +315,11 @@ def format_conversation_history(messages: List[Dict], max_tokens: int = 10000) -
     except ImportError:
         logger.warning("tiktoken not available, falling back to simple truncation")
         # Fallback to simple message count limit
-        recent_messages = messages[-20:] if len(messages) > 20 else messages
+        recent_messages = (
+            messages[-CONVERSATION_HISTORY_RECENT_LIMIT:]
+            if len(messages) > CONVERSATION_HISTORY_RECENT_LIMIT
+            else messages
+        )
         formatted_messages = []
 
         for message in recent_messages:
@@ -328,7 +341,7 @@ def build_enhanced_prompt(
     conversation_history: List[Dict] = None,
     current_message: str = "",
     user_name: str = "",
-    max_history_tokens: int = 6000,  # Reduced for more concise prompts
+    max_history_tokens: int = ENHANCED_PROMPT_HISTORY_TOKENS,  # Token limit for enhanced prompt history
 ) -> str:
     """
     Build a concise, contextual prompt with system instructions, memories, and conversation context.
