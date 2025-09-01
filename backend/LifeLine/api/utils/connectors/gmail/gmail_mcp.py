@@ -11,13 +11,24 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Dict, List, Any
 
-from api.models import MCPConnector
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import Flow
+from google_auth_httplib2 import AuthorizedHttp
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+
+from ....models import MCPConnector
+import httplib2
+from google_auth_oauthlib.flow import InstalledAppFlow
+import threading
+import time
+from ...constants import (
+    GMAIL_API_MAX_RETRIES,
+    GMAIL_API_RETRY_BASE_SECONDS,
+    GMAIL_SEARCH_DEFAULT_MAX_RESULTS,
+)
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -50,6 +61,8 @@ class GmailMCPServer:
         self.credentials = None
         self.executor = get_shared_executor()  # Use shared executor
         self._connector = None
+        # Serialize all Gmail API calls (httplib2 is NOT thread-safe)
+        self._api_lock = threading.Lock()
 
     def get_connector(self):
         """Get or create MCPConnector for this user."""
@@ -172,10 +185,8 @@ class GmailMCPServer:
             if not redirect_uri:
                 redirect_uris = oauth_config.get("web", {}).get("redirect_uris") or []
                 redirect_uri = redirect_uris[0] if redirect_uris else "http://localhost:8000/api/auth/gmail/callback"
-        flow = Flow.from_client_config(oauth_config, scopes=self.SCOPES, redirect_uri=redirect_uri)
-        auth_url, _ = flow.authorization_url(
-            access_type="offline", include_granted_scopes="true", state=self.user_id, prompt="consent"
-        )
+        flow = InstalledAppFlow.from_client_config(oauth_config, scopes=self.SCOPES, redirect_uri=redirect_uri)
+        auth_url, _ = flow.authorization_url(access_type="offline", include_granted_scopes="true", state=self.user_id, prompt="consent")
         return auth_url
 
     def handle_oauth_callback(self, code: str, redirect_uri: str = None) -> bool:
@@ -189,7 +200,7 @@ class GmailMCPServer:
                     getattr(settings, "GMAIL_OAUTH_REDIRECT_URI", None)
                     or "http://localhost:8000/api/auth/gmail/callback"
                 )
-            flow = Flow.from_client_config(oauth_config, scopes=self.SCOPES, redirect_uri=redirect_uri)
+            flow = InstalledAppFlow.from_client_config(oauth_config, scopes=self.SCOPES, redirect_uri=redirect_uri)
             flow.fetch_token(code=code)
             creds = flow.credentials
             if not creds.refresh_token:
@@ -207,7 +218,9 @@ class GmailMCPServer:
             logger.error("[GmailMCP] Initialization failed - invalid credentials")
             return False
         try:
-            self.service = build("gmail", "v1", credentials=self.credentials)
+            with self._api_lock:
+                http_auth = AuthorizedHttp(self.credentials, http=httplib2.Http())
+                self.service = build("gmail", "v1", http=http_auth, cache_discovery=False)
             return True
         except Exception as e:
             logger.error(f"[GmailMCP] Service build error: {e}")
@@ -229,9 +242,10 @@ class GmailMCPServer:
             return {"error": "Not authenticated"}
         try:
             message = self._create_message(to, subject, body, cc, bcc, html_body, attachments, mime_type)
-            result = await asyncio.get_event_loop().run_in_executor(
-                self.executor, lambda: self.service.users().messages().send(userId="me", body=message).execute()
-            )
+            def _send():
+                with self._api_lock:
+                    return self.service.users().messages().send(userId="me", body=message).execute()
+            result = await asyncio.get_event_loop().run_in_executor(self.executor, _send)
             return {"success": True, "message_id": result["id"], "thread_id": result.get("threadId")}
         except Exception as e:
             logger.error(f"[GmailMCP] send_email error: {e}")
@@ -286,9 +300,17 @@ class GmailMCPServer:
         if not self.service and not self.initialize_service():
             return {"error": "Not authenticated"}
         try:
-            raw = await asyncio.get_event_loop().run_in_executor(
-                self.executor, lambda: self.service.users().messages().get(userId="me", id=message_id).execute()
-            )
+            def _get():
+                last_err = None
+                for attempt in range(GMAIL_API_MAX_RETRIES):
+                    try:
+                        with self._api_lock:
+                            return self.service.users().messages().get(userId="me", id=message_id).execute()
+                    except Exception as e:
+                        last_err = e
+                        time.sleep(GMAIL_API_RETRY_BASE_SECONDS * (2 ** attempt))
+                raise last_err
+            raw = await asyncio.get_event_loop().run_in_executor(self.executor, _get)
             return self._parse_email_message(raw)
         except Exception as e:
             logger.error(f"[GmailMCP] read_email error: {e}")
@@ -336,25 +358,111 @@ class GmailMCPServer:
             "labels": message.get("labelIds", []),
         }
 
-    async def search_emails(self, query: str, max_results: int = 10) -> Dict[str, Any]:
+    async def search_emails(self, query: str, max_results: int = GMAIL_SEARCH_DEFAULT_MAX_RESULTS, ids_only: bool = False) -> Dict[str, Any]:
         """Search emails with Gmail query syntax"""
         if not self.service and not self.initialize_service():
             return {"error": "Not authenticated"}
         try:
-            results = await asyncio.get_event_loop().run_in_executor(
-                self.executor,
-                lambda: self.service.users().messages().list(userId="me", q=query, maxResults=max_results).execute(),
-            )
-            ids = results.get("messages", [])
-            emails = []
-            for m in ids:
-                parsed = await self.read_email(m["id"])
-                if "error" not in parsed:
-                    emails.append(parsed)
-            return {"messages": emails, "total_count": len(emails), "query": query}
+            if ids_only:
+                # Only fetch message IDs
+                def _list():
+                    last_err = None
+                    for attempt in range(GMAIL_API_MAX_RETRIES):
+                        try:
+                            with self._api_lock:
+                                return self.service.users().messages().list(userId='me', q=query, maxResults=max_results).execute()
+                        except Exception as e:
+                            last_err = e
+                            time.sleep(GMAIL_API_RETRY_BASE_SECONDS * (2 ** attempt))
+                    raise last_err
+                response = _list()
+                messages = response.get('messages', [])
+                logger.info(f"[GmailMCP] Found {len(messages)} email IDs for query: '{query}'")
+                return messages
+            else:
+                # Legacy: fetch full messages (less efficient for large queries)
+                def _list_full():
+                    last_err = None
+                    for attempt in range(GMAIL_API_MAX_RETRIES):
+                        try:
+                            with self._api_lock:
+                                return self.service.users().messages().list(userId='me', q=query, maxResults=max_results).execute()
+                        except Exception as e:
+                            last_err = e
+                            time.sleep(GMAIL_API_RETRY_BASE_SECONDS * (2 ** attempt))
+                    raise last_err
+                response = _list_full()
+                messages = response.get('messages', [])
+
+                email_details = []
+                if not messages:
+                    logger.info(f"[GmailMCP] No emails found for query: '{query}'")
+                    return []
+
+                for message in messages:
+                    def _get_full():
+                        last_err = None
+                        for attempt in range(GMAIL_API_MAX_RETRIES):
+                            try:
+                                with self._api_lock:
+                                    return self.service.users().messages().get(userId='me', id=message['id'], format='full').execute()
+                            except Exception as e:
+                                last_err = e
+                                time.sleep(GMAIL_API_RETRY_BASE_SECONDS * (2 ** attempt))
+                        raise last_err
+                    msg = _get_full()
+                    email_details.append(self._parse_email_data(msg))
+
+                logger.info(f"[GmailMCP] Successfully fetched {len(email_details)} full emails for query: '{query}'")
+                return email_details
+
         except Exception as e:
             logger.error(f"[GmailMCP] search_emails error: {e}")
             return {"error": str(e)}
+
+    def read_emails_by_id(self, email_ids: list):
+        """Reads a batch of emails by their IDs."""
+        try:
+            email_details = []
+            for email_id in email_ids:
+                def _get_full():
+                    last_err = None
+                    for attempt in range(GMAIL_API_MAX_RETRIES):
+                        try:
+                            with self._api_lock:
+                                return self.service.users().messages().get(userId='me', id=email_id, format='full').execute()
+                        except Exception as e:
+                            last_err = e
+                            time.sleep(GMAIL_API_RETRY_BASE_SECONDS * (2 ** attempt))
+                    raise last_err
+                msg = _get_full()
+                email_details.append(self._parse_email_data(msg))
+            return email_details
+        except Exception as e:
+            logger.error(f"[GmailMCP] read_emails_by_id error: {e}")
+            return {"error": str(e)}
+
+    def _parse_email_data(self, msg):
+        """Helper to parse email data from raw message."""
+        email_data = {'id': msg['id'], 'threadId': msg['threadId'], 'snippet': msg['snippet']}
+        headers = msg['payload']['headers']
+        for header in headers:
+            if header['name'] == 'Subject':
+                email_data['subject'] = header['value']
+            if header['name'] == 'From':
+                email_data['from'] = header['value']
+            if header['name'] == 'Date':
+                email_data['date'] = header['value']
+
+        # Get body content
+        if 'parts' in msg['payload']:
+            parts = msg['payload']['parts']
+            data = parts[0]['body']['data']
+        else:
+            data = msg['payload']['body']['data']
+
+        email_data['body'] = base64.urlsafe_b64decode(data.encode('ASCII')).decode('utf-8')
+        return email_data
 
     async def list_labels(self) -> Dict[str, Any]:
         """List all Gmail labels"""
@@ -376,13 +484,13 @@ class GmailMCPServer:
         if not self.service and not self.initialize_service():
             return {"error": "Not authenticated"}
         try:
-            body = {
+            label_body = {
                 "name": name,
                 "messageListVisibility": message_list_visibility,
                 "labelListVisibility": label_list_visibility,
             }
             result = await asyncio.get_event_loop().run_in_executor(
-                self.executor, lambda: self.service.users().labels().create(userId="me", body=body).execute()
+                self.executor, lambda: self.service.users().labels().create(userId="me", body=label_body).execute()
             )
             return result
         except Exception as e:
@@ -395,15 +503,20 @@ class GmailMCPServer:
         """Modify email labels"""
         if not self.service and not self.initialize_service():
             return {"error": "Not authenticated"}
+
+        json_body = {}
+        if add_label_ids:
+            json_body["addLabelIds"] = add_label_ids
+        if remove_label_ids:
+            json_body["removeLabelIds"] = remove_label_ids
+
+        if not json_body:
+            return {"error": "No labels to add or remove"}
+
         try:
-            body = {}
-            if add_label_ids:
-                body["addLabelIds"] = add_label_ids
-            if remove_label_ids:
-                body["removeLabelIds"] = remove_label_ids
             result = await asyncio.get_event_loop().run_in_executor(
                 self.executor,
-                lambda: self.service.users().messages().modify(userId="me", id=message_id, body=body).execute(),
+                lambda: self.service.users().messages().modify(userId="me", id=message_id, body=json_body).execute(),
             )
             return result
         except Exception as e:

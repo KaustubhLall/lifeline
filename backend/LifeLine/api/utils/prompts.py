@@ -135,6 +135,13 @@ For Email Requests:
 - "send email" → compose and send with reasonable subject/content
 - "search for X" → search emails and summarize findings
 
+**CRITICAL: Large-Scale Email Processing Workflow**
+- If a user asks to summarize a large number of emails (e.g., more than 20), you MUST avoid injecting large raw email bodies into the conversation to prevent token overflow.
+- **Step 1: Get Email IDs.** Call the `search_emails` tool with `ids_only=True` to quickly retrieve only the email IDs.
+- **Step 2: Summarize in Batches (Preferred).** Process IDs in small batches using the configured batch size and call `summarize_emails_by_id` with the configured summarization model to extract compact, structured facts (issuer, amount, due date, actions, evidence). This keeps context small while preserving information.
+- **Step 3: Deep Dive When Needed.** If you need the full content of a specific email, call `read_email` for that single ID only.
+- **Step 4: Consolidate.** Merge batch summaries into one clear final answer with tables and action items.
+
 Response Style:
 - Lead with action, follow with brief context
 - Use markdown for structure (tables, lists, headers)
@@ -309,7 +316,9 @@ def format_conversation_history(messages: List[Dict], max_tokens: int = 10000) -
 
         history_text = "\n".join(formatted_messages)
 
-        logger.info(f"Formatted conversation history: {len(formatted_messages)} messages, {total_tokens} tokens")
+        logger.info(
+            f"Formatted conversation history: {len(formatted_messages)} messages, {total_tokens} tokens"
+        )
         return history_text
 
     except ImportError:

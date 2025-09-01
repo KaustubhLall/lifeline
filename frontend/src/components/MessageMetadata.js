@@ -1,5 +1,6 @@
 import React from 'react';
 import '../styles/components/MessageMetadata.css';
+import { formatDuration } from '../utils/formatUtils';
 
 function MessageMetadata({metadata, onOpenSettings}) {
     // Always render, but show "No metadata available" if empty
@@ -37,7 +38,7 @@ function MessageMetadata({metadata, onOpenSettings}) {
                         {latency_ms !== undefined && (
                             <div className="metadata-item">
                                 <span className="metadata-label">Latency</span>
-                                <span className="metadata-value">{latency_ms} ms</span>
+                                <span className="metadata-value">{formatDuration(latency_ms)}</span>
                             </div>
                         )}
                         {token_usage && (
@@ -126,7 +127,7 @@ function MessageMetadata({metadata, onOpenSettings}) {
                                                 <li key={index} className="agent-item">
                                                     <div className="agent-item-main">
                                                         <span className="tool-name">{tool.tool_name}</span>
-                                                        <span className="tool-latency">{tool.latency_ms}ms</span>
+                                                        <span className="tool-latency">{formatDuration(tool.latency_ms)}</span>
                                                     </div>
                                                 </li>
                                             ))}
@@ -146,7 +147,7 @@ function MessageMetadata({metadata, onOpenSettings}) {
                                                 <li key={index} className="agent-item">
                                                     <div className="agent-item-main">
                                                         <span className="step-node">{step.node}</span>
-                                                        <span className="step-duration">{step.duration_ms}ms</span>
+                                                        <span className="step-duration">{formatDuration(step.duration_ms)}</span>
                                                     </div>
                                                     {(step.tokens?.total > 0 || step.tool_calls_count > 0 || step.message_type) && (
                                                         <div className="agent-item-details">
