@@ -12,6 +12,7 @@ from langgraph.prebuilt import ToolNode
 
 from .connectors.gmail.gmail_agent_tool import GmailAgentTool
 from .constants import (
+    DEFAULT_MODEL,
     DEFAULT_TEMPERATURE,
     AGENT_HISTORY_LIMIT_MESSAGES,
     AGENT_RESUMMARY_THRESHOLD_TOKENS,
@@ -39,7 +40,7 @@ def run_agent(
     user: User,
     conversation_id: int,
     question: str,
-    model: str = "gpt-4o-mini",
+    model: str = DEFAULT_MODEL,
     temperature: float = DEFAULT_TEMPERATURE,
     conversation_history: list = None,
 ) -> dict:

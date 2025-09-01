@@ -2,6 +2,7 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {isSTTSupported} from '../utils/speechUtils';
 import {API_BASE, fetchWithAuth} from '../utils/apiUtils';
+import { TRANSCRIBE_DEFAULT_MODEL } from '../config';
 
 export function useSpeechToText(authenticated) {
     const [sttActive, setSttActive] = useState(false);
@@ -143,7 +144,7 @@ export function useSpeechToText(authenticated) {
                                 method: 'POST',
                                 body: JSON.stringify({
                                     audio: base64Audio,
-                                    model: 'gpt-4o-mini-transcribe',
+                                    model: TRANSCRIBE_DEFAULT_MODEL,
                                     format: recorder.mimeType
                                 })
                             });

@@ -16,6 +16,7 @@ from .constants import (
     AGENT_MAX_CHUNK_TOKENS,
     AGENT_MODERATE_CONTENT_TOKENS,
     CHUNK_OVERLAP_TOKENS,
+    MAX_CHUNK_TOKENS_CAP,
 )
 
 logger = logging.getLogger(__name__)
@@ -104,7 +105,7 @@ class TokenManager:
         
         # Use a more conservative approach - ignore system/history for chunking
         # Focus on making chunks that fit within our max chunk size
-        chunk_size_tokens = min(self.max_chunk_tokens, 20000)  # Cap at 20k tokens per chunk
+        chunk_size_tokens = min(self.max_chunk_tokens, MAX_CHUNK_TOKENS_CAP)  # Use centralized cap
         
         if chunk_size_tokens <= CHUNK_OVERLAP_TOKENS:
             logger.error(f"[TokenManager] Insufficient tokens for chunking: {chunk_size_tokens}")

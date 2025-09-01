@@ -6,18 +6,62 @@
 # =============================================================================
 
 # Default model and API settings (can be overridden in requests)
-DEFAULT_MODEL = "gpt-4.1-nano"  # Default LLM model
-DEFAULT_CONVERSATIONAL_MODE = "conversational"  # Default conversation mode
-DEFAULT_TEMPERATURE = 0.2  # Default model temperature
-TTS_DEFAULT_MODEL = "tts-1"  # Default text-to-speech model
-TTS_DEFAULT_VOICE = "alloy"  # Default TTS voice
+# DEFAULT_MODEL
+# - Purpose: Backend-wide default chat model when none is provided.
+# - Used by: `views/views.py` (ConversationListCreateView.post, MessageListCreateView.post),
+#            `agent_utils.run_agent(model=DEFAULT_MODEL)` parameter default.
+# - Rationale: Lightweight, cost-effective default that still supports our prompt sizes.
+DEFAULT_MODEL = "gpt-4.1-nano"
+
+# DEFAULT_CONVERSATIONAL_MODE
+# - Purpose: Default mode for new conversations and message processing.
+# - Used by: `views/views.py` when initializing conversations and handling messages.
+# - Rationale: Ensures consistent routing to non-agent conversational flows unless specified otherwise.
+DEFAULT_CONVERSATIONAL_MODE = "conversational"
+
+# DEFAULT_TEMPERATURE
+# - Purpose: Default randomness for generation when not specified by client.
+# - Used by: `views/views.py` defaults into LLM calls; `llm.call_llm_text(..., temperature=DEFAULT_TEMPERATURE)`.
+# - Rationale: Slight creativity while maintaining determinism for assistant tone.
+DEFAULT_TEMPERATURE = 0.2
+
+# TTS_DEFAULT_MODEL
+# - Purpose: Default text-to-speech model for `llm.call_llm_TTS()`.
+# - Used by: `llm.call_llm_TTS(model=TTS_DEFAULT_MODEL, ...)` default arg.
+# - Rationale: Stable, broadly available TTS backend.
+TTS_DEFAULT_MODEL = "tts-1"
+
+# TTS_DEFAULT_VOICE
+# - Purpose: Default synthetic voice for TTS responses.
+# - Used by: `llm.call_llm_TTS(voice=TTS_DEFAULT_VOICE, ...)` default arg.
+# - Rationale: Chosen for clarity and neutrality.
+TTS_DEFAULT_VOICE = "alloy"
+
+# TRANSCRIBE_DEFAULT_MODEL
+# - Purpose: Default speech-to-text model for audio transcription.
+# - Used by: `llm.call_llm_transcribe()` and `llm.call_llm_transcribe_memory()` default arg; value also originates
+#            from frontend `frontend/src/hooks/useSpeechToText.js` when calling transcribe API.
+# - Rationale: Transcription-specialized variant optimized for accuracy and latency.
+TRANSCRIBE_DEFAULT_MODEL = "gpt-4o-mini-transcribe"
 
 # Pagination defaults (can be overridden in query params)
-DEFAULT_PAGE_NUMBER = 1  # Default page number for pagination
+# DEFAULT_PAGE_NUMBER
+# - Purpose: Default page index when pagination params are omitted.
+# - Used by: `views/views.py` endpoints employing pagination.
+# - Rationale: Conventional 1-based pagination for user-facing APIs.
+DEFAULT_PAGE_NUMBER = 1
 
 # Frontend auto-refresh settings
-AUTO_REFRESH_DELAY_MS = 3000  # Delay before checking for title updates (frontend)
-AUTO_REFRESH_TIMEOUT_MS = 15000  # Maximum time to keep auto-refresh enabled
+# AUTO_REFRESH_DELAY_MS
+# - Purpose: Client UI delay between background refresh checks (title updates, etc.).
+# - Used by: Frontend; not imported by backend.
+# - Rationale: Balance responsiveness with request overhead.
+AUTO_REFRESH_DELAY_MS = 3000
+# AUTO_REFRESH_TIMEOUT_MS
+# - Purpose: Client UI maximum duration to auto-refresh before stopping.
+# - Used by: Frontend; not imported by backend.
+# - Rationale: Prevents indefinite background polling.
+AUTO_REFRESH_TIMEOUT_MS = 15000
 
 # =============================================================================
 # BACKEND-ONLY CONFIGURATION CONSTANTS
@@ -25,28 +69,79 @@ AUTO_REFRESH_TIMEOUT_MS = 15000  # Maximum time to keep auto-refresh enabled
 # =============================================================================
 
 # Auto-titling configuration
-AUTO_TITLE_MIN_MESSAGES = 3  # Minimum messages required before auto-titling can occur
-AUTO_TITLE_MAX_WORDS = 8  # Maximum words allowed in generated titles
-AUTO_TITLE_MAX_LENGTH = 100  # Maximum character length for titles
+# AUTO_TITLE_MIN_MESSAGES
+# - Purpose: Minimum message count before a conversation is eligible for auto-title.
+# - Used by: `conversation_utils.should_auto_title_conversation()` and `generate_auto_title()`.
+# - Rationale: Ensures enough context for a meaningful title (first 3 messages considered).
+AUTO_TITLE_MIN_MESSAGES = 3
+# AUTO_TITLE_MAX_WORDS
+# - Purpose: Upper bound on words in generated titles.
+# - Used by: `conversation_utils.generate_auto_title()` validation step.
+# - Rationale: Keep titles concise for sidebar readability.
+AUTO_TITLE_MAX_WORDS = 8
+# AUTO_TITLE_MAX_LENGTH
+# - Purpose: Character-length limit for generated titles.
+# - Used by: `conversation_utils.generate_auto_title()` truncation check.
+# - Rationale: Avoids overflow in UI and database fields.
+AUTO_TITLE_MAX_LENGTH = 100
 
 # Memory system configuration
-MAX_HISTORY_TOKENS = 10000  # Maximum tokens for conversation history
-MAX_MEMORIES_RELEVANT = 5  # Maximum relevant memories to include
-MAX_MEMORIES_CONVERSATION = 3  # Maximum conversation-specific memories
-MIN_SIMILARITY_THRESHOLD = 0.3  # Minimum similarity for memory retrieval
-CONVERSATION_MEMORIES_LIMIT = 5  # Default limit for conversation-specific memories
-DEFAULT_MEMORIES_BY_TYPE_LIMIT = 10  # Default limit for memories by type query
+# MAX_HISTORY_TOKENS
+# - Purpose: Upper bound for tokens considered from recent history in enhanced prompts.
+# - Used by: `views/views.py` prompt building.
+# - Rationale: Control context size and latency.
+MAX_HISTORY_TOKENS = 10000
+# MAX_MEMORIES_RELEVANT
+# - Purpose: Max number of globally relevant memories to include.
+# - Used by: `views/views.py` memory retrieval before prompting.
+# - Rationale: Keep context focused and compact.
+MAX_MEMORIES_RELEVANT = 5
+# MAX_MEMORIES_CONVERSATION
+# - Purpose: Max number of conversation-scoped memories to include.
+# - Used by: `views/views.py` memory retrieval.
+# - Rationale: Prioritize highly related items without flooding prompt.
+MAX_MEMORIES_CONVERSATION = 3
+# MIN_SIMILARITY_THRESHOLD
+# - Purpose: Minimum cosine similarity cutoff for including a memory.
+# - Used by: `views/views.py` via `memory_utils` retrieval.
+# - Rationale: Filter out weak matches.
+MIN_SIMILARITY_THRESHOLD = 0.3
+# CONVERSATION_MEMORIES_LIMIT
+# - Purpose: Default limit for conversation-specific memory queries.
+# - Used by: Currently advisory; reserved for consistent querying.
+# - Rationale: Establishes standard page-size for future endpoints.
+CONVERSATION_MEMORIES_LIMIT = 5
+# DEFAULT_MEMORIES_BY_TYPE_LIMIT
+# - Purpose: Default page-size when listing memories by type.
+# - Used by: Currently advisory.
+# - Rationale: Prevents overly large payloads.
+DEFAULT_MEMORIES_BY_TYPE_LIMIT = 10
 
 # LLM and AI processing settings
-LLM_EXTRACTION_TEMPERATURE = 0.1  # Temperature for memory extraction LLM calls
-EMBEDDING_DEFAULT_MODEL = "text-embedding-3-small"  # Default embedding model
-ENHANCED_PROMPT_HISTORY_TOKENS = 6000  # Token limit for enhanced prompt history
+# LLM_EXTRACTION_TEMPERATURE
+# - Purpose: Determinism level for extraction tasks.
+# - Used by: `llm.call_llm_memory_extraction`, `llm.call_llm_conversation_memory_extraction` flows.
+# - Rationale: Lower temperature yields stable JSON outputs for storage.
+LLM_EXTRACTION_TEMPERATURE = 0.1
+# EMBEDDING_DEFAULT_MODEL
+# - Purpose: Default model for embedding generation.
+# - Used by: `llm.call_llm_embedding(model=EMBEDDING_DEFAULT_MODEL)`.
+# - Rationale: Cost-effective with sufficient quality for retrieval.
+EMBEDDING_DEFAULT_MODEL = "text-embedding-3-small"
+# ENHANCED_PROMPT_HISTORY_TOKENS
+# - Purpose: Token cap for recent history included by enhanced prompt builders.
+# - Used by: `prompts.py` when assembling prompts.
+# - Rationale: Reduce context bloat while preserving recency.
+ENHANCED_PROMPT_HISTORY_TOKENS = 6000
 
 # =============================================================================
 # MODEL-SPECIFIC TOKEN LIMITS AND CONFIGURATIONS
 # Context window limits for different OpenAI models (as of 2025)
 # These limits determine how much text can be processed in a single request
 # =============================================================================
+# MODEL_CONTEXT_LIMITS: Mapping of API model name -> maximum context window (tokens)
+# Usage: consumed by `token_utils.TokenManager` to set context_limit and derive safe limits and chunk sizes.
+# Interactions: In `token_utils.TokenManager.__init__`: `self.context_limit = MODEL_CONTEXT_LIMITS.get(model, 128000)`
 MODEL_CONTEXT_LIMITS = {
     # Latest GPT-5 family models (2025)
     "gpt-5": 1000000,  # 1M tokens - Latest flagship model with massive context
@@ -74,25 +169,33 @@ MODEL_CONTEXT_LIMITS = {
 # These constants control how we manage token limits to prevent API errors
 # =============================================================================
 
-# SAFETY_MARGIN: Reserve 10% of context window to account for:
-# - Token counting inaccuracies between tiktoken and OpenAI's internal counting
-# - Unexpected overhead from message formatting and API structures
-# - Buffer for model response generation without hitting limits
+# TOKEN_SAFETY_MARGIN
+# - Purpose: Reserve a fraction of context window to avoid API limit errors.
+# - Used by: `token_utils.TokenManager.safe_context_limit`.
+# - Rationale: Accounts for encoding variance and overhead structures.
+# - Interactions: In `TokenManager.__init__`: `self.safe_context_limit = int(self.context_limit * (1 - TOKEN_SAFETY_MARGIN))`
 TOKEN_SAFETY_MARGIN = 0.1
 
-# CHUNK_OVERLAP: Number of tokens to overlap between consecutive chunks
-# Purpose: Maintains context continuity when processing large documents
-# Helps the model understand connections between chunk boundaries
+# CHUNK_OVERLAP_TOKENS
+# - Purpose: Overlap size between consecutive chunks to maintain continuity.
+# - Used by: `token_utils.TokenManager.chunk_content*` helpers.
+# - Rationale: Reduces coherence loss across chunk boundaries.
+# - Interactions: In `TokenManager.chunk_content()` and `.chunk_content_with_size()`:
+#   `effective_chunk_tokens = max(chunk_size_tokens - CHUNK_OVERLAP_TOKENS, 1000)` and overlap concatenation uses `overlap = content[overlap_start_char:start_char]` where `overlap_tokens = min(CHUNK_OVERLAP_TOKENS, tokens_processed)`
 CHUNK_OVERLAP_TOKENS = 200
 
-# MIN_RESPONSE_TOKENS: Minimum tokens reserved for the model's response
-# Ensures the model has enough space to generate a complete, useful response
-# Prevents truncated responses due to context window exhaustion
+# MIN_RESPONSE_TOKENS
+# - Purpose: Guaranteed headroom for completion tokens.
+# - Used by: `token_utils.TokenManager.get_available_tokens()`.
+# - Rationale: Prevents truncated outputs under heavy context.
+# - Interactions: In `TokenManager.get_available_tokens()`: `used_tokens = system_tokens + history_tokens + MIN_RESPONSE_TOKENS + SYSTEM_PROMPT_BUFFER_TOKENS`; then `available = self.safe_context_limit - used_tokens`
 MIN_RESPONSE_TOKENS = 2000
 
-# SYSTEM_PROMPT_BUFFER: Extra tokens reserved for system prompts and overhead
-# Accounts for: system messages, prompt formatting, API metadata, tool definitions
-# Provides buffer for dynamic prompt components (memories, context, etc.)
+# SYSTEM_PROMPT_BUFFER_TOKENS
+# - Purpose: Reserved tokens for system prompts, tool schemas, and dynamic memory/context.
+# - Used by: `token_utils.TokenManager.get_available_tokens()`.
+# - Rationale: Avoids overruns when prompts expand.
+# - Interactions: See `MIN_RESPONSE_TOKENS` above for the exact `used_tokens` formula.
 SYSTEM_PROMPT_BUFFER_TOKENS = 1000
 
 # =============================================================================
@@ -101,35 +204,50 @@ SYSTEM_PROMPT_BUFFER_TOKENS = 1000
 # =============================================================================
 
 # Default model and temperature for tool-level email summarization
-# EMAIL_SUMMARY_MODEL_DEFAULT: Model used by Gmail summarization tool (hardcoded to avoid context errors)
-# Should be a high-context model (128k+) to handle large email batches without truncation
+# EMAIL_SUMMARY_MODEL_DEFAULT
+# - Purpose: Forced model for Gmail summarization tool to avoid legacy 8k context errors.
+# - Used by: `connectors/gmail/gmail_agent_tool.summarize_emails_by_id()` (overrides any agent-provided model).
+# - Rationale: Stability and sufficient context for batch summaries.
 EMAIL_SUMMARY_MODEL_DEFAULT = "gpt-4.1-nano"
-# EMAIL_SUMMARY_TEMPERATURE_DEFAULT: Temperature for email summarization (0.0 = deterministic, factual extraction)
+# EMAIL_SUMMARY_TEMPERATURE_DEFAULT
+# - Purpose: Default temperature for email summarization.
+# - Used by: `gmail_agent_tool.summarize_emails_by_id()` when temperature is not provided.
+# - Rationale: Deterministic extraction of facts.
 EMAIL_SUMMARY_TEMPERATURE_DEFAULT = 0.0
 
 # Preview lengths used when compressing email content before summarization
-# EMAIL_BODY_PREVIEW_CHARS: Max characters from email body to include in summarization input
-# Larger values = more context but higher token usage. Balance between detail and efficiency.
+# EMAIL_BODY_PREVIEW_CHARS
+# - Purpose: Max body characters included per email in summarization input.
+# - Used by: `gmail_agent_tool.compact_email()` before invoking LLM.
+# - Rationale: Keeps token usage controlled while preserving salient content.
 EMAIL_BODY_PREVIEW_CHARS = 5000
-# EMAIL_SNIPPET_PREVIEW_CHARS: Max characters from email snippet/preview text
-# Used as fallback when full body is unavailable or for quick previews
+# EMAIL_SNIPPET_PREVIEW_CHARS
+# - Purpose: Max snippet characters included when full body is missing/unnecessary.
+# - Used by: `gmail_agent_tool.compact_email()`.
+# - Rationale: Provide quick context with minimal cost.
 EMAIL_SNIPPET_PREVIEW_CHARS = 500
 
-# Batch size guidance for processing email IDs
-# GMAIL_SUMMARY_BATCH_SIZE: Recommended number of emails to process in a single summarization call
-# Higher values = more efficient but risk hitting token limits. Lower values = safer but more API calls.
+# GMAIL_SUMMARY_BATCH_SIZE
+# - Purpose: Recommended count per summarization batch.
+# - Used by: Advisory (current code does not enforce this).
+# - Rationale: Balance throughput vs. token risk.
 GMAIL_SUMMARY_BATCH_SIZE = 12
 
-# Default max results for Gmail search
-# GMAIL_SEARCH_DEFAULT_MAX_RESULTS: Default number of emails returned by search_emails tool
-# Prevents overwhelming responses while allowing user to request more if needed
+# GMAIL_SEARCH_DEFAULT_MAX_RESULTS
+# - Purpose: Default cap on results returned by search tool.
+# - Used by: `gmail_agent_tool.search_emails` default parameter.
+# - Rationale: Prevent large payloads by default.
 GMAIL_SEARCH_DEFAULT_MAX_RESULTS = 5
 
-# Gmail API retry/backoff settings to mitigate transient SSL/transport errors
-# GMAIL_API_MAX_RETRIES: Number of retry attempts for failed Gmail API calls
-# Helps handle transient network issues and rate limiting
+# GMAIL_API_MAX_RETRIES
+# - Purpose: Recommended number of retries for transient Gmail API failures.
+# - Used by: Advisory (connector implementation reference).
+# - Rationale: Mitigate network/SSL flakiness.
 GMAIL_API_MAX_RETRIES = 3
-# GMAIL_API_RETRY_BASE_SECONDS: Base delay between retry attempts (exponential backoff)
+# GMAIL_API_RETRY_BASE_SECONDS
+# - Purpose: Base backoff delay in seconds.
+# - Used by: Advisory.
+# - Rationale: Exponential backoff starting value.
 GMAIL_API_RETRY_BASE_SECONDS = 0.3
 
 # =============================================================================
@@ -137,80 +255,126 @@ GMAIL_API_RETRY_BASE_SECONDS = 0.3
 # Controls how the LangGraph agent processes large content and manages context
 # =============================================================================
 
-# AGENT_MAX_CHUNK_TOKENS: Maximum size of each chunk when processing large tool outputs
-# Purpose: Breaks down massive email/document data into digestible pieces
-# Balance: Large enough to preserve context, small enough to avoid token limits
-# Used when tool outputs exceed available context space
+# AGENT_MAX_CHUNK_TOKENS
+# - Purpose: Upper bound for per-chunk size during large tool output processing.
+# - Used by: `token_utils.TokenManager` to bound chunk sizes.
+# - Rationale: Avoid memory spikes and API pressure.
+# - Interactions: In `TokenManager.__init__`: `self.max_chunk_tokens = min(AGENT_MAX_CHUNK_TOKENS, self.safe_context_limit // 4)`
 AGENT_MAX_CHUNK_TOKENS = 75000
 
-# AGENT_MODERATE_CONTENT_TOKENS: Threshold for triggering focused summarization
-# Purpose: Content above this size gets summarized instead of passed through
-# Prevents moderately large content from consuming too much context
-# Applied to tool outputs that don't need full chunking but are still large
+# AGENT_MODERATE_CONTENT_TOKENS
+# - Purpose: Token threshold above which moderate content is summarized instead of passed verbatim.
+# - Used by: `token_utils.TokenManager.should_summarize_moderate_content()`.
+# - Rationale: Keep context lean for mid-sized payloads.
+# - Interactions: In `TokenManager.should_summarize_moderate_content()`: `return self.count_tokens(content) > self.moderate_content_tokens`
 AGENT_MODERATE_CONTENT_TOKENS = 8000
 
-# AGENT_HISTORY_LIMIT_MESSAGES: Maximum conversation history messages to include
-# Purpose: Limits conversation context to prevent token overflow
-# Keeps only the most recent exchanges to maintain relevance
-# Older messages are excluded to make room for current processing
+# AGENT_HISTORY_LIMIT_MESSAGES
+# - Purpose: Max count of recent messages included in agent context.
+# - Used by: `agent_utils.run_agent`.
+# - Rationale: Improves focus and reduces token use.
 AGENT_HISTORY_LIMIT_MESSAGES = 10
 
-# AGENT_MESSAGE_TRUNCATE_TOKENS: Maximum tokens per individual history message
-# Purpose: Prevents any single message from consuming excessive context
-# Long messages get truncated while preserving their essential content
-# Ensures balanced token allocation across conversation history
+# AGENT_MESSAGE_TRUNCATE_TOKENS
+# - Purpose: Truncate any single history message exceeding this token count.
+# - Used by: `agent_utils.run_agent`.
+# - Rationale: Prevent one message from dominating context budget.
 AGENT_MESSAGE_TRUNCATE_TOKENS = 25000
 
-# AGENT_RESUMMARY_THRESHOLD_TOKENS: Threshold for re-summarizing combined chunk summaries
-# Purpose: Only re-summarize if combined summaries exceed this limit
-# Prevents unnecessary re-summarization when individual summaries are already concise
-# Should be significantly smaller than model context to leave room for system prompt + history
+# AGENT_RESUMMARY_THRESHOLD_TOKENS
+# - Purpose: If combined chunk summaries exceed this, re-summarize to a smaller digest.
+# - Used by: `agent_utils.run_agent`.
+# - Rationale: Keep multi-chunk summaries within safe context.
 AGENT_RESUMMARY_THRESHOLD_TOKENS = 50000
 
-# AGENT_MAX_PARALLEL_CHUNKS: Maximum number of chunks to process in parallel
-# Purpose: Limits concurrent API calls to prevent rate limiting and memory issues
-# Balance: High enough for speed, low enough to avoid overwhelming the API
+# AGENT_MAX_PARALLEL_CHUNKS
+# - Purpose: Concurrency cap for processing chunked work.
+# - Used by: `agent_utils.run_agent`.
+# - Rationale: Balance throughput with rate limits and memory.
 AGENT_MAX_PARALLEL_CHUNKS = 10
 
-# Concurrency detection tolerance
-# CONCURRENCY_TOLERANCE: Allowed relative error when comparing step duration
-# to sum/max of per-tool latencies to classify sync/async execution.
-# Example: 0.2 allows +/-20% mismatch and still count as equal.
+# CONCURRENCY_TOLERANCE
+# - Purpose: Allowed relative error when classifying sync vs. async tool execution from timings.
+# - Used by: `agent_utils` concurrency detection logic.
+# - Rationale: Real-world timings are noisy; tolerance reduces false classifications.
 CONCURRENCY_TOLERANCE = 0.2
 
-# Memory scoring algorithm weights
-MEMORY_SIMILARITY_WEIGHT = 0.6  # Weight for semantic similarity in memory scoring
-MEMORY_IMPORTANCE_WEIGHT = 0.3  # Weight for importance score in memory scoring
-MEMORY_RECENCY_WEIGHT = 0.1  # Weight for recency in memory scoring
-MEMORY_CONTEXT_SIMILARITY_WEIGHT = 0.7  # Weight for context similarity
-MEMORY_IMPORTANCE_CONTEXT_WEIGHT = 0.3  # Weight for importance in context scoring
-MEMORY_RECENCY_DAYS_DIVISOR = 30.0  # Days divisor for recency calculation
+# MAX_CHUNK_TOKENS_CAP
+# - Purpose: Absolute upper bound for chunk size regardless of model/context.
+# - Used by: `token_utils.TokenManager.chunk_content()`.
+# - Rationale: Safety guard against pathological sizes.
+# - Interactions: In `TokenManager.chunk_content()`: `chunk_size_tokens = min(self.max_chunk_tokens, MAX_CHUNK_TOKENS_CAP)`
+MAX_CHUNK_TOKENS_CAP = 20000
 
-# Default values and fallbacks
-DEFAULT_IMPORTANCE_SCORE = 0.5  # Default importance score for memories
-DEFAULT_CONFIDENCE_SCORE = 0.0  # Default confidence score
-DEFAULT_MESSAGE_COUNT = 0  # Default message count for new conversations
-DEFAULT_TOTAL_STEPS = 0  # Default total steps for agent metadata
-DEFAULT_TOTAL_TOKENS = 0  # Default total tokens for agent metadata
-DEFAULT_EMBEDDING_DIMENSIONS = 0  # Default embedding dimensions when none available
+# Memory scoring algorithm weights
+# MEMORY_SIMILARITY_WEIGHT / MEMORY_IMPORTANCE_WEIGHT / MEMORY_RECENCY_WEIGHT
+# - Purpose: Weights for base memory ranking.
+# - Used by: `memory_utils.py` scoring pipeline.
+# - Rationale: Emphasize semantic match while accounting for importance and freshness.
+MEMORY_SIMILARITY_WEIGHT = 0.6
+MEMORY_IMPORTANCE_WEIGHT = 0.3
+MEMORY_RECENCY_WEIGHT = 0.1
+# MEMORY_CONTEXT_SIMILARITY_WEIGHT / MEMORY_IMPORTANCE_CONTEXT_WEIGHT / MEMORY_RECENCY_DAYS_DIVISOR
+# - Purpose: Weights for context-specific scoring and recency normalization.
+# - Used by: `memory_utils.py` scoring pipeline.
+# - Rationale: Tailor results to current conversation context.
+MEMORY_CONTEXT_SIMILARITY_WEIGHT = 0.7
+MEMORY_IMPORTANCE_CONTEXT_WEIGHT = 0.3
+MEMORY_RECENCY_DAYS_DIVISOR = 30.0
+
+# DEFAULT_IMPORTANCE_SCORE
+# - Purpose: Fallback importance when LLM omits value.
+# - Used by: `memory_utils` during storage.
+# - Rationale: Midpoint default to avoid biasing ranking extremes.
+DEFAULT_IMPORTANCE_SCORE = 0.5
+# DEFAULT_CONFIDENCE_SCORE
+# - Purpose: Fallback extraction confidence when LLM omits value.
+# - Used by: `memory_utils` metadata.
+# - Rationale: Conservative default implies "unknown" rather than overstated confidence.
+DEFAULT_CONFIDENCE_SCORE = 0.0
+# DEFAULT_MESSAGE_COUNT / DEFAULT_TOTAL_STEPS / DEFAULT_TOTAL_TOKENS
+# - Purpose: Initialize counters in agent/telemetry metadata.
+# - Used by: Views and agent flows when creating new records.
+# - Rationale: Explicit zeros over None for simpler math/analytics.
+DEFAULT_MESSAGE_COUNT = 0
+DEFAULT_TOTAL_STEPS = 0
+DEFAULT_TOTAL_TOKENS = 0
+# DEFAULT_EMBEDDING_DIMENSIONS
+# - Purpose: Placeholder dimensionality when provider doesn't return size.
+# - Used by: Embedding storage paths.
+# - Rationale: Avoids null field issues.
+DEFAULT_EMBEDDING_DIMENSIONS = 0
+# MEMORY_EXTRACTION_MODEL_DEFAULT
+# - Purpose: Default model for memory extraction over conversation pairs.
+# - Used by: `llm.call_llm_conversation_memory_extraction(model=...)` default arg; referenced by `memory_utils`.
+# - Rationale: Efficient model with good JSON adherence.
+MEMORY_EXTRACTION_MODEL_DEFAULT = "gpt-4o-mini"
 
 # Text processing and display limits
-MAX_MEMORY_DISPLAY_CHARS = 100  # Maximum characters to display per memory
-MEMORY_TRUNCATE_CHARS = 97  # Characters before truncation (leaving 3 for "...")
-MAX_MEMORY_TITLE_CHARS = 50  # Maximum characters for memory title
-MAX_MEMORIES_IN_CONTEXT = 8  # Maximum memories to include in context
-CONVERSATION_HISTORY_RECENT_LIMIT = 20  # Number of recent messages to include
+# MAX_MEMORY_DISPLAY_CHARS / MEMORY_TRUNCATE_CHARS
+# - Purpose: Limit preview size for displayed memory content.
+# - Used by: Views and admin/UI serializers.
+# - Rationale: Keep list views readable; reserve 3 chars for ellipsis.
+MAX_MEMORY_DISPLAY_CHARS = 100
+MEMORY_TRUNCATE_CHARS = 97
+# MAX_MEMORY_TITLE_CHARS / MAX_MEMORIES_IN_CONTEXT / CONVERSATION_HISTORY_RECENT_LIMIT
+# - Purpose: Control title lengths, number of memories injected, and short history window.
+# - Used by: Views and prompt builders.
+# - Rationale: Concise UI and focused prompts.
+MAX_MEMORY_TITLE_CHARS = 50
+MAX_MEMORIES_IN_CONTEXT = 8
+CONVERSATION_HISTORY_RECENT_LIMIT = 20
 
 # =============================================================================
 # TIKTOKEN ENCODING MODEL MAPPING
 # Maps OpenAI API model names to their corresponding tiktoken encoding models
 # Tiktoken uses different encoding names than the API model names
 # =============================================================================
-
-# TIKTOKEN_MODEL_MAPPING: Maps API model names to tiktoken encoding identifiers
-# Purpose: Ensures accurate token counting by using the correct encoding
-# Tiktoken doesn't have encodings for every model variant, so we map to base models
-# This mapping is critical for accurate token counting and chunking decisions
+# TIKTOKEN_MODEL_MAPPING: API model -> tiktoken encoding name
+# - Purpose: Ensure correct encodings are used for token counting.
+# - Used by: `token_utils.TokenManager`.
+# - Rationale: Some API models share encodings; mapping improves accuracy.
+# - Interactions: In `TokenManager.__init__`: `self.tiktoken_model = TIKTOKEN_MODEL_MAPPING.get(model, DEFAULT_TIKTOKEN_MODEL)` then `tiktoken.encoding_for_model(self.tiktoken_model)`
 TIKTOKEN_MODEL_MAPPING = {
     # GPT-5 family -> use GPT-4o encoding (most similar available)
     "gpt-5": "gpt-4o",
@@ -233,19 +397,45 @@ TIKTOKEN_MODEL_MAPPING = {
     "gpt-3.5-turbo-16k": "gpt-3.5-turbo",
 }
 
-# DEFAULT_TIKTOKEN_MODEL: Fallback encoding for unknown or new models
-# Purpose: Provides safe default when encountering unrecognized model names
-# Uses GPT-4o encoding as it's the most current and widely compatible
+# DEFAULT_TIKTOKEN_MODEL: fallback encoding if API model not found in mapping.
+# - Purpose: Safe default encoder selection.
+# - Used by: `token_utils.TokenManager`.
+# - Rationale: GPT-4o encoding is broadly compatible.
+# - Interactions: Used via `TIKTOKEN_MODEL_MAPPING.get(..., DEFAULT_TIKTOKEN_MODEL)` in `TokenManager.__init__`
 DEFAULT_TIKTOKEN_MODEL = "gpt-4o"
 
 # Debug and logging settings
-DEBUG_PREVIEW_CHARS = 500  # Characters to show in debug preview
-LOG_MESSAGE_PREVIEW_CHARS = 100  # Characters to show in log message preview
-AGENT_RESPONSE_PREVIEW_CHARS = 200  # Characters to show in agent response preview
+# DEBUG_PREVIEW_CHARS / LOG_MESSAGE_PREVIEW_CHARS / AGENT_RESPONSE_PREVIEW_CHARS
+# - Purpose: Truncate debug payloads in logs and admin to keep storage and noise low.
+# - Used by: `views/views.py` and admin/debug utilities.
+# - Rationale: Prevent massive strings from polluting logs/DB.
+# - Interactions:
+#   In `views/views.py:MessageListCreateView.post()`
+#   - Query preview when retrieving memories:
+#     `logger.info(f"[ENHANCED RAG] ... '{user_message[:LOG_MESSAGE_PREVIEW_CHARS]}...'")`
+#   - Final prompt preview:
+#     `logger.debug(f"[PROMPT BUILDING] Final prompt preview: {enhanced_prompt[:DEBUG_PREVIEW_CHARS]}...")`
+#   - Agent response preview:
+#     `logger.info(f"[AGENT MODE] Agent finished with response: {final_response[:AGENT_RESPONSE_PREVIEW_CHARS]}...")`
+DEBUG_PREVIEW_CHARS = 500
+LOG_MESSAGE_PREVIEW_CHARS = 100
+AGENT_RESPONSE_PREVIEW_CHARS = 200
 
 # Audio processing settings
-MIN_AUDIO_SIZE_BYTES = 1024  # Minimum audio file size for transcription
-AUDIO_SEEK_END_POSITION = 2  # Position for seeking to end of audio file (os.SEEK_END)
+# MIN_AUDIO_SIZE_BYTES
+# - Purpose: Reject empty/invalid recordings early by minimum byte size.
+# - Used by: `views/views.py` transcription endpoint.
+# - Rationale: Avoids unnecessary API calls and errors.
+MIN_AUDIO_SIZE_BYTES = 1024
+# AUDIO_SEEK_END_POSITION
+# - Purpose: os.SEEK_END constant used for in-memory file size checks.
+# - Used by: `llm.call_llm_transcribe_memory()`.
+# - Rationale: Cross-platform clarity without importing os in constants.
+AUDIO_SEEK_END_POSITION = 2
 
 # System constants
-MS_CONVERSION_FACTOR = 1000  # Factor to convert seconds to milliseconds
+# MS_CONVERSION_FACTOR
+# - Purpose: Convert seconds to milliseconds for latency metrics.
+# - Used by: `llm.call_llm_text()` and other timing calculations.
+# - Rationale: Centralized conversion to keep code readable.
+MS_CONVERSION_FACTOR = 1000
