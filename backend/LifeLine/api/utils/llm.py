@@ -279,7 +279,9 @@ def call_llm_embedding(text: str, model: str = "text-embedding-3-small") -> list
         raise LLMError(f"Failed to generate embedding: {e}")
 
 
-def call_llm_conversation_memory_extraction(user_message: str, ai_response: str, current_date: str = None, model: str = "gpt-4o-mini") -> dict:
+def call_llm_conversation_memory_extraction(
+    user_message: str, ai_response: str, current_date: str = None, model: str = "gpt-4o-mini"
+) -> dict:
     """
     Extract memorable information from a conversation pair (user question + AI response).
     Focuses on actionable items, deadlines, and important context with clear dates.
@@ -298,9 +300,10 @@ def call_llm_conversation_memory_extraction(user_message: str, ai_response: str,
     """
     if not current_date:
         current_date = datetime.now().strftime("%Y-%m-%d")
-    
-    _log_call_info("call_llm_conversation_memory_extraction", model=model, 
-                   content_length=len(user_message) + len(ai_response))
+
+    _log_call_info(
+        "call_llm_conversation_memory_extraction", model=model, content_length=len(user_message) + len(ai_response)
+    )
 
     extraction_prompt = f"""
 Analyze this conversation pair and extract memorable information, focusing on actionable items and important context.
@@ -346,7 +349,9 @@ Only extract memories that would be genuinely useful to remember later.
 """
 
     try:
-        logger.info(f"Extracting memory from conversation pair - User: {len(user_message)} chars, AI: {len(ai_response)} chars")
+        logger.info(
+            f"Extracting memory from conversation pair - User: {len(user_message)} chars, AI: {len(ai_response)} chars"
+        )
 
         response_data = call_llm_text(extraction_prompt, model=model, temperature=0.1)
         response_text = response_data["text"]
@@ -355,9 +360,13 @@ Only extract memories that would be genuinely useful to remember later.
 
         try:
             memory_data = json.loads(response_text)
-            logger.info(f"Conversation memory extraction successful - Has memory: {memory_data.get('has_memory', False)}")
-            if memory_data.get('has_memory'):
-                logger.info(f"Memory type: {memory_data.get('memory_type')}, Actionable: {memory_data.get('is_actionable')}, Deadline: {memory_data.get('deadline_date')}")
+            logger.info(
+                f"Conversation memory extraction successful - Has memory: {memory_data.get('has_memory', False)}"
+            )
+            if memory_data.get("has_memory"):
+                logger.info(
+                    f"Memory type: {memory_data.get('memory_type')}, Actionable: {memory_data.get('is_actionable')}, Deadline: {memory_data.get('deadline_date')}"
+                )
             return memory_data
         except json.JSONDecodeError:
             logger.warning(f"Failed to parse conversation memory extraction response as JSON: {response_text}")

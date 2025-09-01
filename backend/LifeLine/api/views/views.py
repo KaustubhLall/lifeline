@@ -1,7 +1,6 @@
 import base64
 import io
 import logging
-import time
 from threading import Thread
 
 from django.contrib.auth import get_user_model
@@ -15,6 +14,8 @@ from rest_framework.views import APIView
 
 from ..models.chat import Conversation, Message, MessageNote, Memory, PromptDebug
 from ..serializers import MemorySerializer, MemoryCreateSerializer, MessageSerializer
+from ..utils.agent_utils import run_agent
+from ..utils.conversation_utils import async_auto_title_conversation
 from ..utils.llm import call_llm_text, APIBudgetError, ModelNotAvailableError, LLMError
 from ..utils.memory_utils import (
     extract_and_store_memory,
@@ -24,8 +25,6 @@ from ..utils.memory_utils import (
     get_conversation_memories,
 )
 from ..utils.prompts import build_enhanced_prompt, get_system_prompt, validate_mode
-from ..utils.agent_utils import run_agent
-from ..utils.conversation_utils import async_auto_title_conversation
 
 # Configure logging with filename and line numbers
 logging.basicConfig(

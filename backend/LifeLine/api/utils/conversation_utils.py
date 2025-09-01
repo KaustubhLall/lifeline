@@ -1,10 +1,11 @@
 import logging
 from typing import Optional
+
 from django.db import transaction
 
-from ..models.chat import Conversation, Message
 from .llm import call_llm_text, LLMError
 from .prompts import generate_conversation_title_prompt
+from ..models.chat import Conversation
 
 logger = logging.getLogger(__name__)
 

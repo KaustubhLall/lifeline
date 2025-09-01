@@ -3,11 +3,11 @@ import operator
 import time
 from typing import TypedDict, Annotated, Sequence
 
-from langchain_core.messages import HumanMessage, ToolMessage, AnyMessage, BaseMessage
+from django.contrib.auth import get_user_model
+from langchain_core.messages import HumanMessage, BaseMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
-from django.contrib.auth import get_user_model
 
 from .connectors.gmail.gmail_agent_tool import GmailAgentTool
 from .prompts import get_system_prompt
