@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 # Shared ThreadPoolExecutor to avoid resource exhaustion
 _shared_executor = None
 
+
 def get_shared_executor():
     """Get or create shared ThreadPoolExecutor for all Gmail operations."""
     global _shared_executor
@@ -270,7 +271,7 @@ class GmailMCPServer:
         else:
             # Use MIMEText directly for simple messages
             message = MIMEText(body, _subtype="html" if mime_type == "text/html" else "plain")
-        
+
         message["to"] = ", ".join(to)
         message["subject"] = subject
         if cc:

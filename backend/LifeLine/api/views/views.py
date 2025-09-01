@@ -1,7 +1,6 @@
 import base64
 import io
 import logging
-import time
 from threading import Thread
 
 from django.contrib.auth import get_user_model
@@ -13,8 +12,17 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from backend.LifeLine.api.utils.constants import (
+    AUTO_TITLE_MIN_MESSAGES,
+    MAX_MEMORIES_RELEVANT,
+    MIN_SIMILARITY_THRESHOLD,
+    MIN_AUDIO_SIZE_BYTES,
+    MAX_HISTORY_TOKENS,
+)
 from ..models.chat import Conversation, Message, MessageNote, Memory, PromptDebug
 from ..serializers import MemorySerializer, MemoryCreateSerializer, MessageSerializer
+from ..utils.agent_utils import run_agent
+from ..utils.conversation_utils import async_auto_title_conversation
 from ..utils.llm import call_llm_text, APIBudgetError, ModelNotAvailableError, LLMError
 from ..utils.memory_utils import (
     extract_and_store_memory,
@@ -24,7 +32,6 @@ from ..utils.memory_utils import (
     get_conversation_memories,
 )
 from ..utils.prompts import build_enhanced_prompt, get_system_prompt, validate_mode
-from ..utils.agent_utils import run_agent
 
 # Configure logging with filename and line numbers
 logging.basicConfig(
@@ -57,7 +64,9 @@ def async_conversation_memory_extraction(user_message_id, ai_message_id, user_id
         extract_and_store_conversation_memory(user_message, ai_message, user)
 
     except Exception as e:
-        logger.error(f"Background conversation memory extraction failed for messages {user_message_id}, {ai_message_id}: {str(e)}")
+        logger.error(
+            f"Background conversation memory extraction failed for messages {user_message_id}, {ai_message_id}: {str(e)}"
+        )
 
 
 def async_memory_extraction(message_id, user_id):
@@ -251,8 +260,8 @@ class MessageListCreateView(APIView):
             relevant_memories = get_relevant_memories(
                 user=request.user,
                 query=user_message,
-                limit=5,  # Increased from 3 for better context
-                min_similarity=0.3,  # FIXED: Lowered from 0.6 to 0.3 for better recall
+                limit=MAX_MEMORIES_RELEVANT,  # Increased from 3 for better context
+                min_similarity=MIN_SIMILARITY_THRESHOLD,  # FIXED: Lowered from 0.6 to 0.3 for better recall
             )
 
             # Get conversation-specific memories
@@ -307,7 +316,7 @@ class MessageListCreateView(APIView):
                 conversation_history=message_history,
                 current_message=user_message,
                 user_name=request.user.first_name or request.user.username,
-                max_history_tokens=10000,  # Use 10k token limit as requested
+                max_history_tokens=MAX_HISTORY_TOKENS,  # Use 10k token limit as requested
             )
 
             logger.info(f"[PROMPT BUILDING] Enhanced prompt built - Total length: {len(enhanced_prompt)} characters")
@@ -384,6 +393,7 @@ class MessageListCreateView(APIView):
                         question=user_message,
                         model=model,  # Pass the model from the request
                         temperature=temperature,
+                        conversation_history=message_history,  # Pass conversation history to agent
                     )
                     final_response = agent_result["response"]
                     agent_metadata = agent_result["metadata"]
@@ -416,17 +426,32 @@ class MessageListCreateView(APIView):
 
                     # Start background conversation memory extraction for agent mode too
                     memory_thread = Thread(
-                        target=async_conversation_memory_extraction, 
-                        args=(user_msg.id, bot_msg.id, request.user.id)
+                        target=async_conversation_memory_extraction, args=(user_msg.id, bot_msg.id, request.user.id)
                     )
                     memory_thread.daemon = True
                     memory_thread.start()
-                    logger.info(f"[AGENT CONVERSATION MEMORY] Started background extraction for agent message pair {user_msg.id} + {bot_msg.id}")
+                    logger.info(
+                        f"[AGENT CONVERSATION MEMORY] Started background extraction for agent message pair {user_msg.id} + {bot_msg.id}"
+                    )
 
                     conversation.context.update({"last_bot_response": bot_msg.content})
                     conversation.save()
 
                     user_message_serializer = MessageSerializer(user_msg)
+                    # Check if we should auto-title the conversation after 4 messages (agent mode)
+                    message_count = conversation.messages.count()
+                    if message_count >= AUTO_TITLE_MIN_MESSAGES:  # Use consistent threshold from constants
+                        logger.info(
+                            f"[AUTO-TITLE] Triggering auto-titling for agent conversation {conversation_id} with {message_count} messages"
+                        )
+                        # Start auto-titling in background to avoid blocking the response
+                        auto_title_thread = Thread(target=async_auto_title_conversation, args=(conversation.id,))
+                        auto_title_thread.daemon = True
+                        auto_title_thread.start()
+                        logger.info(
+                            f"[AUTO-TITLE] Started background auto-titling for agent conversation {conversation_id}"
+                        )
+
                     bot_message_serializer = MessageSerializer(bot_msg)
 
                     return Response(
@@ -472,8 +497,8 @@ class MessageListCreateView(APIView):
                     metadata={
                         "model": model,
                         "mode": mode,
-                        "latency_ms": latency_ms, 
-                        "token_usage": usage, 
+                        "latency_ms": latency_ms,
+                        "token_usage": usage,
                         "used_memories": len(all_memories),
                         "relevant_memories": len(relevant_memories),
                         "conversation_memories": len(conversation_memories),
@@ -498,12 +523,13 @@ class MessageListCreateView(APIView):
 
                 # Start background conversation memory extraction with user + AI message pair
                 memory_thread = Thread(
-                    target=async_conversation_memory_extraction, 
-                    args=(user_msg.id, bot_msg.id, request.user.id)
+                    target=async_conversation_memory_extraction, args=(user_msg.id, bot_msg.id, request.user.id)
                 )
                 memory_thread.daemon = True
                 memory_thread.start()
-                logger.info(f"[CONVERSATION MEMORY] Started background extraction for message pair {user_msg.id} + {bot_msg.id}")
+                logger.info(
+                    f"[CONVERSATION MEMORY] Started background extraction for message pair {user_msg.id} + {bot_msg.id}"
+                )
 
                 # Update conversation context with enhanced information
                 conversation.context = {
@@ -529,6 +555,21 @@ class MessageListCreateView(APIView):
                 conversation.save()
 
                 logger.info(f"[CONVERSATION UPDATE] Updated conversation {conversation_id} context with enhanced stats")
+                # Check if we should auto-title the conversation after 4 messages
+                message_count = conversation.messages.count()
+                if (
+                    message_count >= AUTO_TITLE_MIN_MESSAGES
+                ):  # Auto-title any conversation with 4+ messages that still has default title
+                    logger.info(
+                        f"[AUTO-TITLE] Checking auto-titling for conversation {conversation_id} with {message_count} messages"
+                    )
+                    # Start auto-titling in background to avoid blocking the response
+                    auto_title_thread = Thread(target=async_auto_title_conversation, args=(conversation.id,))
+                    auto_title_thread.daemon = True
+                    auto_title_thread.start()
+                    logger.info(
+                        f"[AUTO-TITLE] Started background auto-titling check for conversation {conversation_id}"
+                    )
 
                 user_message_serializer = MessageSerializer(user_msg)
                 bot_message_serializer = MessageSerializer(bot_msg)
@@ -771,7 +812,7 @@ class TranscriptionView(APIView):
                 logger.info(f"Processing audio data in memory - Size: {audio_size} bytes")
 
                 # Check minimum file size (1KB minimum to avoid empty recordings)
-                if audio_size < 1024:
+                if audio_size < MIN_AUDIO_SIZE_BYTES:
                     logger.warning(f"Audio file too small: {audio_size} bytes")
                     return Response(
                         {"detail": "Audio recording too short. Please record for at least 1 second."},

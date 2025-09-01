@@ -201,28 +201,27 @@ def format_memory_context(memories: List[Dict], context_type: str = "personal_co
     try:
         # Create a more natural, concise memory summary
         formatted_memories = []
-        
+
         # Sort memories by importance and recency
-        sorted_memories = sorted(memories, 
-                               key=lambda x: (x.get("importance_score", 0.5), 
-                                             x.get("created_at", "")), 
-                               reverse=True)
-        
+        sorted_memories = sorted(
+            memories, key=lambda x: (x.get("importance_score", 0.5), x.get("created_at", "")), reverse=True
+        )
+
         # Group similar memories and create concise summaries
         for memory in sorted_memories[:8]:  # Limit to top 8 most relevant
             content = memory.get("content", "").strip()
             title = memory.get("title", "").strip()
-            
+
             # Create concise memory entry
             if title and len(title) < 50:
                 memory_text = f"{title}: {content}"
             else:
                 memory_text = content
-            
+
             # Keep it concise - max 100 chars per memory
             if len(memory_text) > 100:
                 memory_text = memory_text[:97] + "..."
-                
+
             formatted_memories.append(memory_text)
 
         # Join memories naturally
@@ -230,7 +229,7 @@ def format_memory_context(memories: List[Dict], context_type: str = "personal_co
             memory_text = "\n".join([f"• {mem}" for mem in formatted_memories])
         else:
             memory_text = "No specific context available."
-            
+
         template = MEMORY_CONTEXT_TEMPLATES.get(context_type, MEMORY_CONTEXT_TEMPLATES["personal_context"])
 
         logger.info(f"Formatted {len(memories)} memories into concise {context_type} context")
@@ -352,13 +351,13 @@ def build_enhanced_prompt(
         system_prompt = get_system_prompt(mode)
         if user_name:
             system_prompt += f"\n\nUser: {user_name}"
-        
+
         # 2. Integrate memory context naturally into system prompt
         if memories and len(memories) > 0:
             memory_context = format_memory_context(memories, "personal_context")
             if memory_context.strip():
                 system_prompt += f"\n\nContext about {user_name or 'the user'}:\n{memory_context}"
-        
+
         prompt_parts.append(system_prompt)
 
         # 3. Recent conversation history (more concise)
@@ -366,7 +365,7 @@ def build_enhanced_prompt(
             # Only include last few messages for immediate context
             recent_messages = conversation_history[-6:] if len(conversation_history) > 6 else conversation_history
             history_parts = []
-            
+
             for msg in recent_messages:
                 role = "User" if msg.get("role") == "user" else "Assistant"
                 content = msg.get("content", "").strip()
@@ -374,7 +373,7 @@ def build_enhanced_prompt(
                     history_parts.append(f"{role}: {content}")
                 elif content:
                     history_parts.append(f"{role}: {content[:150]}...")
-            
+
             if history_parts:
                 prompt_parts.append("\nRecent conversation:\n" + "\n".join(history_parts))
 
@@ -399,6 +398,37 @@ def build_enhanced_prompt(
         if current_message:
             basic_prompt += f"\n\nUser: {current_message}"
         return basic_prompt
+
+
+def generate_conversation_title_prompt(messages: List[Dict]) -> str:
+    """
+    Generate a prompt for creating a conversation title based on the first few messages.
+
+    Args:
+        messages: List of message dictionaries with 'content' and 'is_bot' keys
+
+    Returns:
+        A prompt for the LLM to generate a concise conversation title
+    """
+    conversation_text = ""
+    for i, msg in enumerate(messages[:3]):  # Only use first 3 messages
+        role = "Assistant" if msg.get("is_bot", False) else "User"
+        conversation_text += f"{role}: {msg['content']}\n"
+
+    prompt = f"""Based on the following conversation, generate a concise, descriptive title (3-6 words maximum) that captures the main topic or request. The title should be specific enough to help the user identify this conversation later.
+
+Conversation:
+{conversation_text.strip()}
+
+Generate only the title, no quotes, no additional text. Examples of good titles:
+- "Python Flask API Help"
+- "Resume Career Advice"
+- "Trip Planning to Japan"
+- "Database Schema Design"
+
+Title:"""
+
+    return prompt
 
 
 # Additional utility functions for prompt management

@@ -3,6 +3,7 @@ import logging
 from typing import List, Dict, Any
 
 from langchain_core.tools import tool
+
 from .gmail_mcp import GmailMCPServer, get_shared_executor
 
 logger = logging.getLogger(__name__)

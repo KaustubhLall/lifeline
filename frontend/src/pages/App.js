@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, {useEffect, useState} from 'react';
 import '../styles/App.css';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import Login from '../components/Login';
@@ -117,9 +117,13 @@ function App() {
 
     // Send message to the server
     const handleSend = async () => {
-        if (!input.trim() || !currentId) return;
+        if (!input.trim() || !currentId) {
+            console.warn('handleSend: Missing input or conversation ID', {input: input.trim(), currentId});
+            return;
+        }
 
-        await sendMessage(input, selectedModel, chatMode, userId, temperature);
+        console.log(`App.js: Sending message to conversation ${currentId}`);
+        await sendMessage(input, selectedModel, chatMode, userId, temperature, currentId);
         setInput('');
     };
 
