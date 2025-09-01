@@ -1,12 +1,12 @@
 import React, {useEffect, useRef} from 'react';
 import '../styles/components/ChatInput.css';
 
-function ChatInput({onSend, onSTT, input, setInput, sttActive, sttSupported}) {
+function ChatInput({onSend, onSTT, input, setInput, isSending, isListening, sttSupported}) {
     const textareaRef = useRef(null);
     const formRef = useRef(null);
 
     const handleSTTClick = async () => {
-        console.log('STT button clicked!', {sttSupported, sttActive});
+        console.log('STT button clicked!', {sttSupported, isListening});
         if (onSTT) {
             try {
                 await onSTT();
@@ -52,7 +52,9 @@ function ChatInput({onSend, onSTT, input, setInput, sttActive, sttSupported}) {
     const handleKeyDown = (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            onSend();
+            if (!isSending) {
+                onSend();
+            }
         }
     };
 
@@ -67,35 +69,38 @@ function ChatInput({onSend, onSTT, input, setInput, sttActive, sttSupported}) {
             className="chat-input-form"
             onSubmit={e => {
                 e.preventDefault();
-                onSend();
+                if (!isSending) {
+                    onSend();
+                }
             }}
         >
             <textarea
                 ref={textareaRef}
                 className="message-input"
-                placeholder="Type a message... (Shift+Enter for new line)"
+                placeholder={isSending ? "Generating response..." : "Type a message... (Shift+Enter for new line)"}
                 value={input}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
                 rows={1}
+                disabled={isSending}
             />
             <div className="button-stack">
                 <button
                     type="button"
-                    className={`stt-button ${sttActive ? 'active' : ''} ${sttSupported ? '' : 'disabled'}`}
+                    className={`stt-button ${isListening ? 'active' : ''} ${sttSupported ? '' : 'disabled'}`}
                     onClick={handleSTTClick}
-                    title={sttSupported ? (sttActive ? "Recording..." : "Click to speak") : "Speech Recognition not supported"}
-                    disabled={!sttSupported}
+                    title={sttSupported ? (isListening ? "Recording..." : "Click to speak") : "Speech Recognition not supported"}
+                    disabled={!sttSupported || isSending}
                 >
-                    🎤
+                    <i className="bi bi-mic-fill"></i>
                 </button>
                 <button
                     className="send-button"
                     type="submit"
-                    disabled={!input.trim()}
+                    disabled={!input.trim() || isSending}
                     aria-label="Send"
                 >
-                    🚀
+                    {isSending ? <div className="send-spinner"></div> : <i className="bi bi-arrow-up"></i>}
                 </button>
             </div>
         </form>

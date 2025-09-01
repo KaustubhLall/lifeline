@@ -415,6 +415,48 @@
     background-color: var(--status-error-bg);
 }
 
+/* Sub-tabs for connectors */
+.sub-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--card-border);
+    margin-bottom: 20px;
+}
+
+.sub-tab-button {
+    padding: 10px 20px;
+    cursor: pointer;
+    border: none;
+    background-color: transparent;
+    color: var(--text-muted);
+    font-weight: 500;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s ease-in-out;
+}
+
+.sub-tab-button:hover {
+    color: var(--text-color);
+}
+
+.sub-tab-button.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+}
+
+.sub-tab-content {
+    padding-top: 10px;
+}
+
+.connector-card.placeholder {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-muted);
+    border: 2px dashed var(--card-border);
+}
+
+.connector-card.placeholder h4 {
+    margin-bottom: 10px;
+}
+
 /* OAuth configuration upload dialog styles */
 .auth-actions {
     display: flex;

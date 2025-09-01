@@ -3,6 +3,7 @@ import '../styles/components/MCPConnectors.css';
 import {API_BASE, fetchWithAuth} from '../utils/apiUtils';
 
 const ConnectorsTab = () => {
+    const [activeSubTab, setActiveSubTab] = useState('gmail');
     const [gmailStatus, setGmailStatus] = useState(null);
     const [operations, setOperations] = useState([]);
     const [showTestDialog, setShowTestDialog] = useState(false);
@@ -165,6 +166,29 @@ const ConnectorsTab = () => {
             setTestResult({error: 'Failed to execute operation'});
         }
     };
+
+    const renderSubTabs = () => (
+        <div className="sub-tabs">
+            <button
+                className={`sub-tab-button ${activeSubTab === 'gmail' ? 'active' : ''}`}
+                onClick={() => setActiveSubTab('gmail')}
+            >
+                Gmail
+            </button>
+            <button
+                className={`sub-tab-button ${activeSubTab === 'notion' ? 'active' : ''}`}
+                onClick={() => setActiveSubTab('notion')}
+            >
+                Notion (coming soon)
+            </button>
+            <button
+                className={`sub-tab-button ${activeSubTab === 'gcalendar' ? 'active' : ''}`}
+                onClick={() => setActiveSubTab('gcalendar')}
+            >
+                Google Calendar (coming soon)
+            </button>
+        </div>
+    );
 
     const renderGmailConnector = () => {
         const status = gmailStatus || {
@@ -392,6 +416,13 @@ const ConnectorsTab = () => {
         );
     };
 
+    const renderPlaceholderConnector = (name) => (
+        <div className="connector-card placeholder">
+            <h4>{name} Connector</h4>
+            <p>This connector is not yet available. Check back for updates soon!</p>
+        </div>
+    );
+
     const fetchRedirectUri = async () => {
         try {
             const response = await fetchWithAuth(`${API_BASE}/mcp/gmail/upload-config/`);
@@ -403,26 +434,34 @@ const ConnectorsTab = () => {
         }
     };
 
-    if (loading) {
-        return (
-            <div className="connectors-tab">
-                <h3>MCP Connectors</h3>
-                <div className="loading">Loading MCP connectors...</div>
-            </div>
-        );
-    }
-
     return (
         <div className="connectors-tab">
-            <h3>MCP Connectors</h3>
+            <h3>Connectors</h3>
             <p className="connectors-description">
-                Manage your Model Context Protocol integrations for enhanced AI capabilities.
+                Manage your connections to external services to enhance LifeLine's capabilities.
             </p>
 
-            {renderGmailConnector()}
-            {renderOperationsHistory()}
-            {renderTestDialog()}
-            {renderUploadDialog()}
+            {renderSubTabs()}
+
+            <div className="sub-tab-content">
+                {activeSubTab === 'gmail' && (
+                    <>
+                        {loading ? (
+                            <div className="loading">Loading Gmail status...</div>
+                        ) : (
+                            <>
+                                {renderGmailConnector()}
+                                {renderOperationsHistory()}
+                                {renderTestDialog()}
+                                {renderUploadDialog()}
+                            </>
+                        )}
+                    </>
+                )}
+
+                {activeSubTab === 'notion' && renderPlaceholderConnector('Notion')}
+                {activeSubTab === 'gcalendar' && renderPlaceholderConnector('Google Calendar')}
+            </div>
         </div>
     );
 };
