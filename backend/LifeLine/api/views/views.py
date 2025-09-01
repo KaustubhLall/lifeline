@@ -387,6 +387,7 @@ class MessageListCreateView(APIView):
                         question=user_message,
                         model=model,  # Pass the model from the request
                         temperature=temperature,
+                        conversation_history=message_history,  # Pass conversation history to agent
                     )
                     final_response = agent_result["response"]
                     agent_metadata = agent_result["metadata"]
