@@ -6,7 +6,7 @@ from django.db import transaction
 from .llm import call_llm_text, LLMError
 from .prompts import generate_conversation_title_prompt
 from ..models.chat import Conversation
-from backend.LifeLine.api.utils.constants import AUTO_TITLE_MIN_MESSAGES, AUTO_TITLE_MAX_WORDS, AUTO_TITLE_MAX_LENGTH
+from .constants import AUTO_TITLE_MIN_MESSAGES, AUTO_TITLE_MAX_WORDS, AUTO_TITLE_MAX_LENGTH
 
 logger = logging.getLogger(__name__)
 
