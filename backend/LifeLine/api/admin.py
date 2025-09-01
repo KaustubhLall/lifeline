@@ -1,9 +1,10 @@
 from datetime import timedelta
+import logging
 
 from django.contrib import admin
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Count
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.template.response import TemplateResponse
 from django.urls import reverse, path
 from django.utils import timezone
@@ -11,7 +12,11 @@ from django.utils.decorators import method_decorator
 from django.utils.html import format_html
 
 from .models.chat import Conversation, Message, PromptDebug, Memory, MessageNote
+from .models.email import Email, EmailMigrationStatus
+from .models.mcp_connectors import MCPConnector, MCPOperation
 from .models.user_auth import User
+
+logger = logging.getLogger(__name__)
 
 
 @admin.register(User)
@@ -28,6 +33,11 @@ class UserAdmin(admin.ModelAdmin):
                 "<int:user_id>/overview/",
                 self.admin_site.admin_view(self.user_overview_view),
                 name="api_user_overview",
+            ),
+            path(
+                "<int:user_id>/migrate-emails/",
+                self.admin_site.admin_view(self.migrate_emails_view),
+                name="api_user_migrate_emails",
             ),
         ]
         return custom_urls + urls
@@ -84,6 +94,12 @@ class UserAdmin(admin.ModelAdmin):
         # Get recent activity (last 10 messages)
         recent_activity = user.messages.select_related("conversation").order_by("-created_at")[:10]
 
+        # Get email statistics
+        email_stats = self.get_email_stats(user)
+        
+        # Get MCP connector status
+        mcp_status = self.get_mcp_status(user)
+
         context = {
             "title": f"User Overview: {user.username}",
             "user": user,
@@ -108,9 +124,108 @@ class UserAdmin(admin.ModelAdmin):
             "recent_conversations_list": recent_conversations_list,
             "memories_by_type": memories_by_type,
             "recent_activity": recent_activity,
+            "email_stats": email_stats,
+            "mcp_status": mcp_status,
         }
 
         return TemplateResponse(request, "admin/api/user/overview.html", context)
+
+    def get_email_stats(self, user):
+        """Get email statistics for the user"""
+        from .utils.email_utils import get_email_stats
+        return get_email_stats(user)
+    
+    def get_mcp_status(self, user):
+        """Get MCP connector status for the user"""
+        gmail_connector = MCPConnector.objects.filter(
+            user=user,
+            connector_type='gmail'
+        ).first()
+        
+        migration_status = EmailMigrationStatus.objects.filter(user=user).first()
+        
+        return {
+            'has_gmail_connector': gmail_connector is not None,
+            'gmail_status': gmail_connector.status if gmail_connector else None,
+            'gmail_authenticated': gmail_connector and gmail_connector.status == 'active',
+            'migration_status': migration_status,
+        }
+    
+    @method_decorator(staff_member_required)
+    def migrate_emails_view(self, request, user_id):
+        """Handle email migration requests"""
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return JsonResponse({"error": "User not found"}, status=404)
+        
+        if request.method == 'POST':
+            # Start email migration
+            try:
+                # Check if user has active Gmail connector
+                gmail_connector = MCPConnector.objects.filter(
+                    user=user,
+                    connector_type='gmail',
+                    status='active'
+                ).first()
+                
+                if not gmail_connector:
+                    return JsonResponse({
+                        "error": "No active Gmail connector found for this user"
+                    }, status=400)
+                
+                # Check if migration is already in progress
+                migration_status, created = EmailMigrationStatus.objects.get_or_create(user=user)
+                
+                if migration_status.is_migrating:
+                    return JsonResponse({
+                        "error": "Email migration is already in progress"
+                    }, status=400)
+                
+                # Start migration asynchronously (in a real app, you'd use Celery or similar)
+                import threading
+                from django.core.management import call_command
+                
+                def run_migration():
+                    try:
+                        call_command('migrate_emails', user=user.username, max_emails=100)
+                    except Exception as e:
+                        logger.error(f"Email migration failed for user {user.username}: {e}")
+                
+                thread = threading.Thread(target=run_migration)
+                thread.start()
+                
+                return JsonResponse({
+                    "message": "Email migration started successfully",
+                    "status": "started"
+                })
+                
+            except Exception as e:
+                return JsonResponse({"error": str(e)}, status=500)
+        
+        # GET request - return migration status
+        migration_status = EmailMigrationStatus.objects.filter(user=user).first()
+        
+        if migration_status:
+            return JsonResponse({
+                "is_migrating": migration_status.is_migrating,
+                "total_emails_found": migration_status.total_emails_found,
+                "emails_processed": migration_status.emails_processed,
+                "emails_failed": migration_status.emails_failed,
+                "last_migration_started": migration_status.last_migration_started.isoformat() if migration_status.last_migration_started else None,
+                "last_migration_completed": migration_status.last_migration_completed.isoformat() if migration_status.last_migration_completed else None,
+                "last_error": migration_status.last_error,
+            })
+        else:
+            return JsonResponse({
+                "is_migrating": False,
+                "total_emails_found": 0,
+                "emails_processed": 0,
+                "emails_failed": 0,
+                "last_migration_started": None,
+                "last_migration_completed": None,
+                "last_error": None,
+            })
 
 
 class MessageInline(admin.TabularInline):
@@ -473,6 +588,325 @@ class MessageNoteAdmin(admin.ModelAdmin):
         return obj.message.content[:50] + "..." if len(obj.message.content) > 50 else obj.message.content
 
     message_preview.short_description = "Message"
+
+
+@admin.register(Email)
+class EmailAdmin(admin.ModelAdmin):
+    list_display = [
+        "id",
+        "user",
+        "subject_preview",
+        "sender",
+        "recipient",
+        "received_date",
+        "is_read",
+        "is_starred",
+        "has_attachments",
+        "is_processed",
+    ]
+    list_filter = [
+        "is_read",
+        "is_starred",
+        "is_important",
+        "has_attachments",
+        "is_processed",
+        "received_date",
+        "user",
+    ]
+    search_fields = ["subject", "sender", "recipient", "message_id", "body_text"]
+    readonly_fields = [
+        "message_id",
+        "thread_id",
+        "created_at",
+        "updated_at",
+        "received_date",
+        "sent_date",
+        "content_display",
+        "embedding_info",
+        "raw_data_display",
+    ]
+    
+    fieldsets = (
+        ("Email Information", {
+            "fields": ("user", "message_id", "thread_id", "subject")
+        }),
+        ("Recipients", {
+            "fields": ("sender", "recipient", "cc_recipients", "bcc_recipients")
+        }),
+        ("Content", {
+            "fields": ("content_display",)
+        }),
+        ("Timestamps", {
+            "fields": ("sent_date", "received_date", "created_at", "updated_at")
+        }),
+        ("Flags and Labels", {
+            "fields": ("is_read", "is_starred", "is_important", "labels")
+        }),
+        ("Attachments", {
+            "fields": ("has_attachments", "attachments_metadata"),
+            "classes": ("collapse",)
+        }),
+        ("Processing", {
+            "fields": ("is_processed", "processing_error", "embedding_info"),
+            "classes": ("collapse",)
+        }),
+        ("Raw Data", {
+            "fields": ("raw_data_display",),
+            "classes": ("collapse",)
+        }),
+    )
+
+    def subject_preview(self, obj):
+        if obj.subject:
+            return obj.subject[:50] + "..." if len(obj.subject) > 50 else obj.subject
+        return "No Subject"
+    
+    subject_preview.short_description = "Subject"
+    
+    def content_display(self, obj):
+        content = obj.get_display_content()
+        if content:
+            return format_html(
+                '<div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; white-space: pre-wrap; max-height: 400px; overflow-y: auto; color: #495057; border: 1px solid #dee2e6; font-family: monospace; font-size: 13px;">{}</div>',
+                content[:2000] + "..." if len(content) > 2000 else content
+            )
+        return '<span style="color: #6c757d; font-style: italic;">No content</span>'
+    
+    content_display.short_description = "Email Content"
+    
+    def embedding_info(self, obj):
+        if obj.embedding:
+            return f"Embedding present ({len(obj.embedding)} dimensions) - Model: {obj.embedding_model or 'Unknown'}"
+        return "No embedding"
+    
+    embedding_info.short_description = "Embedding Status"
+    
+    def raw_data_display(self, obj):
+        if obj.raw_email_data:
+            import json
+            formatted_data = json.dumps(obj.raw_email_data, indent=2)
+            return format_html(
+                '<pre style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; color: #495057; border: 1px solid #dee2e6; font-size: 11px; max-height: 500px; overflow-y: auto;">{}</pre>',
+                formatted_data
+            )
+        return '<span style="color: #6c757d; font-style: italic;">No raw data</span>'
+    
+    raw_data_display.short_description = "Raw Gmail Data"
+
+
+@admin.register(EmailMigrationStatus)
+class EmailMigrationStatusAdmin(admin.ModelAdmin):
+    list_display = [
+        "user",
+        "is_migrating",
+        "total_emails_found",
+        "emails_processed",
+        "emails_failed",
+        "last_migration_started",
+        "last_migration_completed",
+    ]
+    list_filter = ["is_migrating", "last_migration_started", "last_migration_completed"]
+    search_fields = ["user__username", "user__email"]
+    readonly_fields = [
+        "created_at",
+        "updated_at",
+        "migration_progress_display",
+        "last_error_display",
+    ]
+    
+    fieldsets = (
+        ("User", {
+            "fields": ("user",)
+        }),
+        ("Status", {
+            "fields": ("is_migrating", "last_migration_started", "last_migration_completed")
+        }),
+        ("Statistics", {
+            "fields": ("total_emails_found", "emails_processed", "emails_failed")
+        }),
+        ("Progress Details", {
+            "fields": ("migration_progress_display",),
+            "classes": ("collapse",)
+        }),
+        ("Error Information", {
+            "fields": ("last_error_display",),
+            "classes": ("collapse",)
+        }),
+        ("Timestamps", {
+            "fields": ("created_at", "updated_at"),
+            "classes": ("collapse",)
+        }),
+    )
+    
+    def migration_progress_display(self, obj):
+        if obj.migration_progress:
+            import json
+            formatted_progress = json.dumps(obj.migration_progress, indent=2)
+            return format_html(
+                '<pre style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; color: #495057; border: 1px solid #dee2e6; font-size: 13px;">{}</pre>',
+                formatted_progress
+            )
+        return '<span style="color: #6c757d; font-style: italic;">No progress data</span>'
+    
+    migration_progress_display.short_description = "Migration Progress"
+    
+    def last_error_display(self, obj):
+        if obj.last_error:
+            return format_html(
+                '<div style="background-color: #ffebee; padding: 15px; border-radius: 4px; white-space: pre-wrap; color: #c62828; border: 1px solid #ef9a9a; font-family: monospace; font-size: 13px;">{}</div>',
+                obj.last_error
+            )
+        return '<span style="color: #6c757d; font-style: italic;">No errors</span>'
+    
+    last_error_display.short_description = "Last Error"
+
+
+@admin.register(MCPConnector)
+class MCPConnectorAdmin(admin.ModelAdmin):
+    list_display = [
+        "id",
+        "user",
+        "connector_type",
+        "name",
+        "status",
+        "is_enabled",
+        "last_authenticated",
+        "last_used",
+    ]
+    list_filter = ["connector_type", "status", "is_enabled", "created_at"]
+    search_fields = ["user__username", "name", "connector_type"]
+    readonly_fields = [
+        "created_at",
+        "updated_at",
+        "last_authenticated",
+        "last_used",
+        "credentials_display",
+        "config_display",
+    ]
+    
+    fieldsets = (
+        ("Basic Information", {
+            "fields": ("user", "connector_type", "name", "status", "is_enabled")
+        }),
+        ("OAuth Configuration", {
+            "fields": ("client_id", "client_secret", "redirect_uri", "scopes")
+        }),
+        ("Credentials", {
+            "fields": ("credentials_display", "token_expiry", "has_refresh_token"),
+            "classes": ("collapse",)
+        }),
+        ("Configuration", {
+            "fields": ("config_display",),
+            "classes": ("collapse",)
+        }),
+        ("Timestamps", {
+            "fields": ("created_at", "updated_at", "last_authenticated", "last_used")
+        }),
+    )
+    
+    def credentials_display(self, obj):
+        if obj.credentials_data:
+            # Don't show sensitive data in admin
+            safe_data = {k: v for k, v in obj.credentials_data.items() if k not in ['refresh_token', 'client_secret']}
+            import json
+            formatted_data = json.dumps(safe_data, indent=2)
+            return format_html(
+                '<pre style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; color: #495057; border: 1px solid #dee2e6; font-size: 13px;">{}</pre>',
+                formatted_data
+            )
+        return '<span style="color: #6c757d; font-style: italic;">No credentials stored</span>'
+    
+    credentials_display.short_description = "Stored Credentials (Safe View)"
+    
+    def config_display(self, obj):
+        if obj.config:
+            import json
+            formatted_config = json.dumps(obj.config, indent=2)
+            return format_html(
+                '<pre style="background-color: #f8f9fa; padding: 15px; border-radius: 4px; color: #495057; border: 1px solid #dee2e6; font-size: 13px;">{}</pre>',
+                formatted_config
+            )
+        return '<span style="color: #6c757d; font-style: italic;">No configuration</span>'
+    
+    config_display.short_description = "Configuration"
+
+
+@admin.register(MCPOperation)
+class MCPOperationAdmin(admin.ModelAdmin):
+    list_display = [
+        "id",
+        "connector",
+        "operation_type",
+        "status",
+        "started_at",
+        "completed_at",
+        "duration_ms",
+    ]
+    list_filter = ["operation_type", "status", "started_at"]
+    search_fields = ["connector__user__username", "operation_type"]
+    readonly_fields = [
+        "started_at",
+        "completed_at",
+        "duration_ms",
+        "request_data_display",
+        "response_data_display",
+        "error_display",
+    ]
+    
+    fieldsets = (
+        ("Operation Information", {
+            "fields": ("connector", "operation_type", "status")
+        }),
+        ("Timing", {
+            "fields": ("started_at", "completed_at", "duration_ms")
+        }),
+        ("Request Data", {
+            "fields": ("request_data_display",),
+            "classes": ("collapse",)
+        }),
+        ("Response Data", {
+            "fields": ("response_data_display",),
+            "classes": ("collapse",)
+        }),
+        ("Error Information", {
+            "fields": ("error_display",),
+            "classes": ("collapse",)
+        }),
+    )
+    
+    def request_data_display(self, obj):
+        if obj.request_data:
+            import json
+            formatted_data = json.dumps(obj.request_data, indent=2)
+            return format_html(
+                '<pre style="background-color: #e3f2fd; padding: 15px; border-radius: 4px; color: #1565c0; border: 1px solid #90caf9; font-size: 13px; max-height: 400px; overflow-y: auto;">{}</pre>',
+                formatted_data
+            )
+        return '<span style="color: #6c757d; font-style: italic;">No request data</span>'
+    
+    request_data_display.short_description = "Request Data"
+    
+    def response_data_display(self, obj):
+        if obj.response_data:
+            import json
+            formatted_data = json.dumps(obj.response_data, indent=2)
+            return format_html(
+                '<pre style="background-color: #e8f5e8; padding: 15px; border-radius: 4px; color: #2e7d32; border: 1px solid #a5d6a7; font-size: 13px; max-height: 400px; overflow-y: auto;">{}</pre>',
+                formatted_data
+            )
+        return '<span style="color: #6c757d; font-style: italic;">No response data</span>'
+    
+    response_data_display.short_description = "Response Data"
+    
+    def error_display(self, obj):
+        if obj.error_message:
+            return format_html(
+                '<div style="background-color: #ffebee; padding: 15px; border-radius: 4px; white-space: pre-wrap; color: #c62828; border: 1px solid #ef9a9a; font-family: monospace; font-size: 13px;">{}</div>',
+                obj.error_message
+            )
+        return '<span style="color: #6c757d; font-style: italic;">No errors</span>'
+    
+    error_display.short_description = "Error Message"
 
 
 # Custom admin site configuration

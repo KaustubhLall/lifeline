@@ -446,6 +446,178 @@
             grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
         }
     }
+
+    /* Email Migration Styles */
+    .email-section {
+        background: var(--surface-color);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+
+    .email-section h4 {
+        margin: 0 0 15px 0;
+        color: var(--text-strong-color);
+        font-size: 1.2rem;
+    }
+
+    .status-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+    }
+
+    .status-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px;
+        background: var(--body-bg);
+        border-radius: 4px;
+        border: 1px solid var(--border-color);
+    }
+
+    .status-label {
+        font-weight: 600;
+        color: var(--text-color);
+    }
+
+    .status-value {
+        color: var(--text-strong-color);
+    }
+
+    .migration-controls {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+
+    .btn {
+        padding: 10px 20px;
+        border-radius: 6px;
+        border: none;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .btn-primary {
+        background: var(--primary-color);
+        color: white;
+    }
+
+    .btn-primary:hover {
+        background: #6a9bc1;
+    }
+
+    .btn-secondary {
+        background: var(--border-color);
+        color: var(--text-strong-color);
+    }
+
+    .btn-secondary:hover {
+        background: #555;
+    }
+
+    .btn-outline {
+        background: transparent;
+        color: var(--primary-color);
+        border: 1px solid var(--primary-color);
+    }
+
+    .btn-outline:hover {
+        background: var(--primary-color);
+        color: white;
+    }
+
+    .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .spinner {
+        animation: spin 1s linear infinite;
+        font-size: 16px;
+    }
+
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
+    .migration-status {
+        background: var(--body-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 15px;
+    }
+
+    .progress-section {
+        margin-top: 15px;
+    }
+
+    .progress-label {
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: var(--text-strong-color);
+    }
+
+    .progress-bar {
+        width: 100%;
+        height: 20px;
+        background: var(--border-color);
+        border-radius: 10px;
+        overflow: hidden;
+    }
+
+    .progress-fill {
+        height: 100%;
+        background: var(--primary-color);
+        transition: width 0.3s ease;
+    }
+
+    .error-count {
+        margin-top: 8px;
+        color: var(--danger-color);
+        font-weight: 600;
+    }
+
+    .error-display {
+        margin-top: 15px;
+        padding: 15px;
+        background: #2d1b1b;
+        border: 1px solid var(--danger-color);
+        border-radius: 6px;
+    }
+
+    .error-display pre {
+        margin: 8px 0 0 0;
+        color: #ff8a80;
+        font-size: 12px;
+        white-space: pre-wrap;
+    }
+
+    .alert {
+        padding: 15px;
+        border-radius: 6px;
+        margin-bottom: 15px;
+    }
+
+    .alert-warning {
+        background: #2d2416;
+        border: 1px solid var(--warning-color);
+        color: #ffcc02;
+    }
+
+    .recent-emails {
+        text-align: center;
+        padding: 20px;
+    }
 </style>
 {% endblock %}
 
@@ -516,6 +688,7 @@
             <li><a href="#conversations" class="tab-button" onclick="showTab(event, 'conversations')">Recent
                 Conversations</a></li>
             <li><a href="#memories" class="tab-button" onclick="showTab(event, 'memories')">Memories</a></li>
+            <li><a href="#emails" class="tab-button" onclick="showTab(event, 'emails')">Email Migration</a></li>
         </ul>
     </div>
 
@@ -610,6 +783,146 @@
         <div class="empty-state">No memories found for this user.</div>
         {% endif %}
     </div>
+
+    <div id="emails" class="tab-content">
+        <h3>Email Migration & Analytics</h3>
+        
+        <!-- MCP Status Section -->
+        <div class="email-section">
+            <h4>Gmail MCP Connector Status</h4>
+            <div class="status-grid">
+                <div class="status-item">
+                    <span class="status-label">Connector:</span>
+                    <span class="status-value">
+                        {% if mcp_status.has_gmail_connector %}
+                            <span class="badge badge-success">Configured</span>
+                        {% else %}
+                            <span class="badge badge-danger">Not Configured</span>
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Authentication:</span>
+                    <span class="status-value">
+                        {% if mcp_status.gmail_authenticated %}
+                            <span class="badge badge-success">Authenticated</span>
+                        {% else %}
+                            <span class="badge badge-warning">{{ mcp_status.gmail_status|default:"Not Authenticated" }}</span>
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Email Statistics Section -->
+        <div class="email-section">
+            <h4>Email Statistics</h4>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number">{{ email_stats.total_emails }}</div>
+                    <div class="stat-label">Total Emails</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">{{ email_stats.processed_emails }}</div>
+                    <div class="stat-label">With Embeddings</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">{{ email_stats.unread_emails }}</div>
+                    <div class="stat-label">Unread</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">{{ email_stats.emails_with_attachments }}</div>
+                    <div class="stat-label">With Attachments</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Migration Control Section -->
+        {% if mcp_status.gmail_authenticated %}
+        <div class="email-section">
+            <h4>Email Migration Control</h4>
+            <div class="migration-controls">
+                <button id="migrate-btn" class="btn btn-primary" onclick="startEmailMigration()">
+                    <span id="migrate-btn-text">Start Email Migration</span>
+                    <span id="migrate-spinner" class="spinner" style="display: none;">⟳</span>
+                </button>
+                <button id="refresh-status-btn" class="btn btn-secondary" onclick="refreshMigrationStatus()">
+                    Refresh Status
+                </button>
+            </div>
+            
+            <!-- Migration Status Display -->
+            <div id="migration-status" class="migration-status">
+                {% if mcp_status.migration_status %}
+                    {% with migration_status=mcp_status.migration_status %}
+                    <div class="status-item">
+                        <span class="status-label">Status:</span>
+                        <span class="status-value">
+                            {% if migration_status.is_migrating %}
+                                <span class="badge badge-info">Migrating...</span>
+                            {% else %}
+                                <span class="badge badge-success">Ready</span>
+                            {% endif %}
+                        </span>
+                    </div>
+                    {% if migration_status.last_migration_started %}
+                    <div class="status-item">
+                        <span class="status-label">Last Started:</span>
+                        <span class="status-value">{{ migration_status.last_migration_started|date:"M d, Y H:i" }}</span>
+                    </div>
+                    {% endif %}
+                    {% if migration_status.last_migration_completed %}
+                    <div class="status-item">
+                        <span class="status-label">Last Completed:</span>
+                        <span class="status-value">{{ migration_status.last_migration_completed|date:"M d, Y H:i" }}</span>
+                    </div>
+                    {% endif %}
+                    {% if migration_status.total_emails_found > 0 %}
+                    <div class="progress-section">
+                        <div class="progress-label">Progress: {{ migration_status.emails_processed }}/{{ migration_status.total_emails_found }} emails</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: {% widthratio migration_status.emails_processed migration_status.total_emails_found 100 %}%"></div>
+                        </div>
+                        {% if migration_status.emails_failed > 0 %}
+                        <div class="error-count">{{ migration_status.emails_failed }} failed</div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    {% if migration_status.last_error %}
+                    <div class="error-display">
+                        <strong>Last Error:</strong>
+                        <pre>{{ migration_status.last_error }}</pre>
+                    </div>
+                    {% endif %}
+                    {% endwith %}
+                {% else %}
+                    <div class="status-item">
+                        <span class="status-label">Status:</span>
+                        <span class="status-value"><span class="badge badge-secondary">Not Started</span></span>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        {% else %}
+        <div class="email-section">
+            <div class="alert alert-warning">
+                Gmail MCP connector must be configured and authenticated before emails can be migrated.
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Recent Emails Preview -->
+        {% if email_stats.total_emails > 0 %}
+        <div class="email-section">
+            <h4>Recent Emails</h4>
+            <div class="recent-emails">
+                <a href="{% url 'admin:api_email_changelist' %}?user__id__exact={{ user.id }}" class="btn btn-outline">
+                    View All {{ email_stats.total_emails }} Emails in Admin
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
 </div>
 
 <script>
@@ -662,5 +975,151 @@
             }
         }
     });
+
+    // Email Migration Functions
+    function startEmailMigration() {
+        const btn = document.getElementById('migrate-btn');
+        const btnText = document.getElementById('migrate-btn-text');
+        const spinner = document.getElementById('migrate-spinner');
+        
+        // Disable button and show spinner
+        btn.disabled = true;
+        btnText.textContent = 'Starting Migration...';
+        spinner.style.display = 'inline';
+        
+        // Make API call to start migration
+        fetch('{% url "admin:api_user_migrate_emails" user.id %}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken'),
+                'Content-Type': 'application/json',
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                alert('Error: ' + data.error);
+                resetMigrateButton();
+            } else {
+                btnText.textContent = 'Migration Started';
+                // Start polling for status updates
+                pollMigrationStatus();
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error starting migration: ' + error);
+            resetMigrateButton();
+        });
+    }
+    
+    function refreshMigrationStatus() {
+        fetch('{% url "admin:api_user_migrate_emails" user.id %}')
+        .then(response => response.json())
+        .then(data => {
+            updateMigrationStatus(data);
+        })
+        .catch(error => {
+            console.error('Error refreshing status:', error);
+        });
+    }
+    
+    function pollMigrationStatus() {
+        const pollInterval = setInterval(() => {
+            fetch('{% url "admin:api_user_migrate_emails" user.id %}')
+            .then(response => response.json())
+            .then(data => {
+                updateMigrationStatus(data);
+                
+                // Stop polling if migration is not in progress
+                if (!data.is_migrating) {
+                    clearInterval(pollInterval);
+                    resetMigrateButton();
+                }
+            })
+            .catch(error => {
+                console.error('Error polling status:', error);
+                clearInterval(pollInterval);
+                resetMigrateButton();
+            });
+        }, 2000); // Poll every 2 seconds
+    }
+    
+    function updateMigrationStatus(data) {
+        const statusDiv = document.getElementById('migration-status');
+        
+        let html = '<div class="status-item">';
+        html += '<span class="status-label">Status:</span>';
+        html += '<span class="status-value">';
+        
+        if (data.is_migrating) {
+            html += '<span class="badge badge-info">Migrating...</span>';
+        } else {
+            html += '<span class="badge badge-success">Ready</span>';
+        }
+        html += '</span></div>';
+        
+        if (data.last_migration_started) {
+            html += '<div class="status-item">';
+            html += '<span class="status-label">Last Started:</span>';
+            html += '<span class="status-value">' + new Date(data.last_migration_started).toLocaleString() + '</span>';
+            html += '</div>';
+        }
+        
+        if (data.last_migration_completed) {
+            html += '<div class="status-item">';
+            html += '<span class="status-label">Last Completed:</span>';
+            html += '<span class="status-value">' + new Date(data.last_migration_completed).toLocaleString() + '</span>';
+            html += '</div>';
+        }
+        
+        if (data.total_emails_found > 0) {
+            const percentage = Math.round((data.emails_processed / data.total_emails_found) * 100);
+            html += '<div class="progress-section">';
+            html += '<div class="progress-label">Progress: ' + data.emails_processed + '/' + data.total_emails_found + ' emails</div>';
+            html += '<div class="progress-bar">';
+            html += '<div class="progress-fill" style="width: ' + percentage + '%"></div>';
+            html += '</div>';
+            
+            if (data.emails_failed > 0) {
+                html += '<div class="error-count">' + data.emails_failed + ' failed</div>';
+            }
+            html += '</div>';
+        }
+        
+        if (data.last_error) {
+            html += '<div class="error-display">';
+            html += '<strong>Last Error:</strong>';
+            html += '<pre>' + data.last_error + '</pre>';
+            html += '</div>';
+        }
+        
+        statusDiv.innerHTML = html;
+    }
+    
+    function resetMigrateButton() {
+        const btn = document.getElementById('migrate-btn');
+        const btnText = document.getElementById('migrate-btn-text');
+        const spinner = document.getElementById('migrate-spinner');
+        
+        btn.disabled = false;
+        btnText.textContent = 'Start Email Migration';
+        spinner.style.display = 'none';
+    }
+    
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
 </script>
 {% endblock %}
