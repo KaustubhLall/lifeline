@@ -22,32 +22,18 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 import os
 
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-fallback-key-for-development-only-change-in-production")
-if not SECRET_KEY:
-    raise ValueError("The SECRET_KEY environment variable is not set. Please set it for production.")
-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "True").lower() == "true"
 
-# Host configuration for development and production
-ALLOWED_HOSTS = [
-    "*localhost*",
-    "127.0.0.1",
-    "192.168.86.47",
-    "10.5.0.2",
-    "0.0.0.0",
-    # Add EC2 compatibility
-    "*.compute.amazonaws.com",
-    "*.amazonaws.com",
-    # Production - get from environment or allow all for now
-    "*" if DEBUG else os.getenv("ALLOWED_HOSTS", "*").split(","),
-]
+if 'DJANGO_SECRET_KEY' not in os.environ and not DEBUG:
+    raise ValueError("DJANGO_SECRET_KEY environment variable must be set in production")
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-fallback-key-for-development-only')
 
-# Flatten ALLOWED_HOSTS if it's a nested list
-if isinstance(ALLOWED_HOSTS[-1], list):
-    ALLOWED_HOSTS = [
-        host for sublist in ALLOWED_HOSTS for host in (sublist if isinstance(sublist, list) else [sublist])
-    ]
+# Host configuration for development and production
+if DEBUG:
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*']  # Only allow wildcard in debug mode
+else:
+    ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',')  # Production hosts from env var
 
 # Application definition
 
@@ -73,8 +59,8 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
-    "django.middleware.csrf.CsrfViewMiddleware",
     "api.middleware.APICSRFExemptMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
