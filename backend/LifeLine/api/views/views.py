@@ -12,6 +12,13 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from backend.LifeLine.api.utils.constants import (
+    AUTO_TITLE_MIN_MESSAGES,
+    MAX_MEMORIES_RELEVANT,
+    MIN_SIMILARITY_THRESHOLD,
+    MIN_AUDIO_SIZE_BYTES,
+    MAX_HISTORY_TOKENS,
+)
 from ..models.chat import Conversation, Message, MessageNote, Memory, PromptDebug
 from ..serializers import MemorySerializer, MemoryCreateSerializer, MessageSerializer
 from ..utils.agent_utils import run_agent
@@ -253,8 +260,8 @@ class MessageListCreateView(APIView):
             relevant_memories = get_relevant_memories(
                 user=request.user,
                 query=user_message,
-                limit=5,  # Increased from 3 for better context
-                min_similarity=0.3,  # FIXED: Lowered from 0.6 to 0.3 for better recall
+                limit=MAX_MEMORIES_RELEVANT,  # Increased from 3 for better context
+                min_similarity=MIN_SIMILARITY_THRESHOLD,  # FIXED: Lowered from 0.6 to 0.3 for better recall
             )
 
             # Get conversation-specific memories
@@ -309,7 +316,7 @@ class MessageListCreateView(APIView):
                 conversation_history=message_history,
                 current_message=user_message,
                 user_name=request.user.first_name or request.user.username,
-                max_history_tokens=10000,  # Use 10k token limit as requested
+                max_history_tokens=MAX_HISTORY_TOKENS,  # Use 10k token limit as requested
             )
 
             logger.info(f"[PROMPT BUILDING] Enhanced prompt built - Total length: {len(enhanced_prompt)} characters")
@@ -433,7 +440,7 @@ class MessageListCreateView(APIView):
                     user_message_serializer = MessageSerializer(user_msg)
                     # Check if we should auto-title the conversation after 4 messages (agent mode)
                     message_count = conversation.messages.count()
-                    if message_count >= 3:  # After user -> bot -> user -> bot pattern
+                    if message_count >= AUTO_TITLE_MIN_MESSAGES:  # Use consistent threshold from constants
                         logger.info(
                             f"[AUTO-TITLE] Triggering auto-titling for agent conversation {conversation_id} with {message_count} messages"
                         )
@@ -550,7 +557,9 @@ class MessageListCreateView(APIView):
                 logger.info(f"[CONVERSATION UPDATE] Updated conversation {conversation_id} context with enhanced stats")
                 # Check if we should auto-title the conversation after 4 messages
                 message_count = conversation.messages.count()
-                if message_count >= 4:  # Auto-title any conversation with 4+ messages that still has default title
+                if (
+                    message_count >= AUTO_TITLE_MIN_MESSAGES
+                ):  # Auto-title any conversation with 4+ messages that still has default title
                     logger.info(
                         f"[AUTO-TITLE] Checking auto-titling for conversation {conversation_id} with {message_count} messages"
                     )
@@ -803,7 +812,7 @@ class TranscriptionView(APIView):
                 logger.info(f"Processing audio data in memory - Size: {audio_size} bytes")
 
                 # Check minimum file size (1KB minimum to avoid empty recordings)
-                if audio_size < 1024:
+                if audio_size < MIN_AUDIO_SIZE_BYTES:
                     logger.warning(f"Audio file too small: {audio_size} bytes")
                     return Response(
                         {"detail": "Audio recording too short. Please record for at least 1 second."},

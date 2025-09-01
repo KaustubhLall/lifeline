@@ -6,6 +6,7 @@ from django.db import transaction
 from .llm import call_llm_text, LLMError
 from .prompts import generate_conversation_title_prompt
 from ..models.chat import Conversation
+from backend.LifeLine.api.utils.constants import AUTO_TITLE_MIN_MESSAGES, AUTO_TITLE_MAX_WORDS, AUTO_TITLE_MAX_LENGTH
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ def should_auto_title_conversation(conversation: Conversation) -> bool:
     """
     # Only auto-title if:
     # 1. The conversation doesn't already have a custom title (avoid overwriting user titles)
-    # 2. The conversation has at least 3 messages (enough content for meaningful title)
+    # 2. The conversation has at least AUTO_TITLE_MIN_MESSAGES messages (enough content for meaningful title)
     # 3. The current title is still the default format
 
     message_count = conversation.messages.count()
@@ -36,9 +37,8 @@ def should_auto_title_conversation(conversation: Conversation) -> bool:
         or current_title == "New Chat"
     )
 
-    # Allow titling for any conversation with at least 3 messages and default title
-    # This handles both new conversations (3-4 messages) and older ones (5+ messages)
-    should_title = message_count >= 3 and is_default_title
+    # Allow titling for any conversation with at least AUTO_TITLE_MIN_MESSAGES messages and default title
+    should_title = message_count >= AUTO_TITLE_MIN_MESSAGES and is_default_title
 
     logger.info(
         f"Auto-title check for conversation {conversation.id}: "
@@ -63,7 +63,7 @@ def generate_auto_title(conversation: Conversation) -> Optional[str]:
         # Get the first 3 messages in chronological order (even if there are more)
         messages = conversation.messages.order_by("created_at")[:3]
 
-        if messages.count() < 3:
+        if messages.count() < AUTO_TITLE_MIN_MESSAGES:
             logger.warning(f"Not enough messages for auto-titling conversation {conversation.id}")
             return None
 
@@ -89,11 +89,11 @@ def generate_auto_title(conversation: Conversation) -> Optional[str]:
         # Clean up the title (remove quotes, extra whitespace, etc.)
         generated_title = generated_title.strip("\"'").strip()
 
-        # Validate title length and content
-        if len(generated_title) > 100:  # Limit title length
-            generated_title = generated_title[:97] + "..."
+        # Validate title length and content using constants
+        if len(generated_title) > AUTO_TITLE_MAX_LENGTH:  # Limit title length
+            generated_title = generated_title[: AUTO_TITLE_MAX_LENGTH - 3] + "..."
 
-        if not generated_title or len(generated_title.split()) > 8:  # Ensure it's reasonably concise
+        if not generated_title or len(generated_title.split()) > AUTO_TITLE_MAX_WORDS:  # Ensure it's reasonably concise
             logger.warning(f"Generated title too long or empty: '{generated_title}'")
             return None
 

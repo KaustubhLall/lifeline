@@ -10,6 +10,7 @@ from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 
 from .connectors.gmail.gmail_agent_tool import GmailAgentTool
+from .constants import DEFAULT_TEMPERATURE
 from .prompts import get_system_prompt
 
 User = get_user_model()
@@ -25,7 +26,7 @@ def run_agent(
     conversation_id: int,
     question: str,
     model: str = "gpt-4o-mini",
-    temperature: float = 0.2,
+    temperature: float = DEFAULT_TEMPERATURE,
     conversation_history: list = None,
 ) -> dict:
     """

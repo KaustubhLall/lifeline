@@ -104,7 +104,7 @@ export function useConversations(authenticated, onLogout) {
             refreshTimeoutRef.current = setTimeout(() => {
                 console.log('🔄 Auto-refreshing conversations for title updates...');
                 refreshConversations();
-            }, 3000); // 3 second delay to allow backend auto-titling to complete
+            }, AUTO_REFRESH_DELAY_MS); // 3 second delay to allow backend auto-titling to complete
         }
 
         return () => {
@@ -241,7 +241,7 @@ export function useConversations(authenticated, onLogout) {
                     setTimeout(() => {
                         setAutoRefreshEnabled(false);
                         console.log(`⏰ Auto-refresh timeout reached, disabling for conversation ${targetConversationId}`);
-                    }, 15000); // 15 seconds should be enough for backend processing
+                    }, AUTO_REFRESH_TIMEOUT_MS); // 15 seconds should be enough for backend processing
                 }
 
                 return newMessages;
