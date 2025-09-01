@@ -6,7 +6,7 @@ import {tomorrow} from 'react-syntax-highlighter/dist/esm/styles/prism';
 import MessageMetadata from './MessageMetadata';
 import '../styles/components/ChatWindow.css';
 
-function ChatWindow({messages, username}) {
+function ChatWindow({messages, username, onQuickAction, onOpenSettings}) {
     const bottomRef = useRef(null);
     const [visibleMetadataId, setVisibleMetadataId] = useState(null);
     const [renderTrigger, setRenderTrigger] = useState(0);
@@ -29,10 +29,41 @@ function ChatWindow({messages, username}) {
         setVisibleMetadataId(prevId => (prevId === messageId ? null : messageId));
     };
 
+    const handleCopyMessage = (content, e) => {
+        navigator.clipboard.writeText(content).then(() => {
+            const originalIcon = e.currentTarget.innerHTML;
+            e.currentTarget.innerHTML = `<i class="bi bi-check-lg"></i>`;
+            setTimeout(() => {
+                e.currentTarget.innerHTML = originalIcon;
+            }, 2000);
+        }).catch(err => {
+            console.error('Failed to copy message: ', err);
+        });
+    };
+
     const formatTime = (timestamp) => {
         if (!timestamp) return '';
         return new Date(timestamp).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
     };
+
+    const QuickActions = () => (
+        <div className="quick-actions-container">
+            <div className="quick-actions-grid">
+                <button className="quick-action-btn" onClick={() => onQuickAction('Summarize my last 25 emails')}>
+                    <i className="bi bi-envelope-paper"></i>
+                    <span>Summarize my last 25 emails</span>
+                </button>
+                <button className="quick-action-btn" onClick={() => onQuickAction('What do you know about me?')}>
+                    <i className="bi bi-person-badge"></i>
+                    <span>What do you know about me?</span>
+                </button>
+                <button className="quick-action-btn" onClick={() => onQuickAction('Help me journal')}>
+                    <i className="bi bi-journal-bookmark"></i>
+                    <span>Help me journal</span>
+                </button>
+            </div>
+        </div>
+    );
 
     const MarkdownRenderer = ({content}) => {
         return (
@@ -41,15 +72,37 @@ function ChatWindow({messages, username}) {
                 components={{
                     code({node, inline, className, children, ...props}) {
                         const match = /language-(\w+)/.exec(className || '');
+                        const codeText = String(children).replace(/\n$/, '');
+
+                        const handleCopyCode = (e) => {
+                            navigator.clipboard.writeText(codeText).then(() => {
+                                const button = e.currentTarget;
+                                button.innerHTML = '<i class="bi bi-check-lg"></i> Copied';
+                                setTimeout(() => {
+                                    button.innerHTML = '<i class="bi bi-clipboard"></i> Copy';
+                                }, 2000);
+                            }).catch(err => {
+                                console.error('Failed to copy code: ', err);
+                            });
+                        };
+
                         return !inline && match ? (
-                            <SyntaxHighlighter
-                                style={tomorrow}
-                                language={match[1]}
-                                PreTag="div"
-                                {...props}
-                            >
-                                {String(children).replace(/\n$/, '')}
-                            </SyntaxHighlighter>
+                            <div className="code-block-container">
+                                <div className="code-block-header">
+                                    <span className="language-name">{match[1]}</span>
+                                    <button className="copy-code-btn" onClick={handleCopyCode}>
+                                        <i className="bi bi-clipboard"></i> Copy
+                                    </button>
+                                </div>
+                                <SyntaxHighlighter
+                                    style={tomorrow}
+                                    language={match[1]}
+                                    PreTag="div"
+                                    {...props}
+                                >
+                                    {codeText}
+                                </SyntaxHighlighter>
+                            </div>
                         ) : (
                             <code className={className} {...props}>
                                 {children}
@@ -115,57 +168,68 @@ function ChatWindow({messages, username}) {
 
     return (
         <div className="chat-window">
-            {messages.map((msg, index) => (
-                <div key={`${msg.id}-${msg.metadata ? Object.keys(msg.metadata).length : 0}-${renderTrigger}`} className="message-container">
-                    <div className={`message-header ${!msg.is_bot ? 'user' : 'bot'}`}>
-                        <div className="message-sender">
-                            {!msg.is_bot ? (
-                                <>
-                                    <span>{username || 'User'}</span>
-                                    <i className="bi bi-person-circle"></i>
-                                </>
-                            ) : (
-                                <>
-                                    <i className="bi bi-robot"></i>
-                                    <span>AI Assistant</span>
-                                </>
-                            )}
-                        </div>
-                        <span className="message-timestamp">{formatTime(msg.created_at)}</span>
-                        {msg.is_bot && (
-                            <button className="metadata-toggle-btn-small" onClick={() => toggleMetadata(msg.id)}>
-                                <i className={`bi ${visibleMetadataId === msg.id ? 'bi-chevron-up' : 'bi-info-circle'}`}></i>
-                            </button>
-                        )}
-                        {/* Debug: Show metadata status */}
-                        {process.env.NODE_ENV === 'development' && msg.is_bot && (
-                            <span style={{fontSize: '0.6rem', color: '#666', marginLeft: '4px'}}>
-                                {msg.metadata ? `✓(${Object.keys(msg.metadata).length})` : '✗'}
-                            </span>
-                        )}
-                    </div>
-                    {visibleMetadataId === msg.id && (
-                        <MessageMetadata metadata={msg.metadata || {}} />
-                    )}
-                    <div className={`message-content ${!msg.is_bot ? 'user-content' : 'bot-content'}`}>
-                        <div
-                            className={`message ${!msg.is_bot ? 'user' : 'bot'} ${msg.pending ? 'pending' : ''} ${msg.error ? 'error' : ''}`}>
-                            {msg.is_bot ? (
-                                <MarkdownRenderer content={msg.content} />
-                            ) : (
-                                msg.content
-                            )}
-                            {msg.pending && (
-                                <div className="message-spinner">
-                                    <div className="spinner-border spinner-border-sm ms-2" role="status">
-                                        <span className="visually-hidden">Loading...</span>
-                                    </div>
+            {messages.length === 0 ? (
+                <QuickActions />
+            ) : (
+                messages.map((msg, index) => (
+                    <div key={`${msg.id}-${msg.metadata ? Object.keys(msg.metadata).length : 0}-${renderTrigger}`} className="message-container">
+                        <div className={`message-header ${!msg.is_bot ? 'user' : 'bot'}`}>
+                            <div className="message-header-left">
+                                <div className="message-sender">
+                                    {!msg.is_bot ? (
+                                        <>
+                                            <span>{username || 'User'}</span>
+                                            <i className="bi bi-person-circle"></i>
+                                        </> 
+                                    ) : (
+                                        <>
+                                            <i className="bi bi-robot"></i>
+                                            <span>AI Assistant</span>
+                                        </>
+                                    )}
                                 </div>
+                                {msg.is_bot && (
+                                    <div className="message-actions">
+                                        <button className="message-action-btn" onClick={(e) => handleCopyMessage(msg.content, e)} title="Copy message">
+                                            <i className="bi bi-clipboard"></i>
+                                        </button>
+                                        <button className="message-action-btn" onClick={() => toggleMetadata(msg.id)} title="View details">
+                                            <i className={`bi ${visibleMetadataId === msg.id ? 'bi-chevron-up' : 'bi-info-circle'}`}></i>
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                            <span className="message-timestamp">{formatTime(msg.created_at)}</span>
+                            {/* Debug: Show metadata status */}
+                            {process.env.NODE_ENV === 'development' && msg.is_bot && (
+                                <span style={{fontSize: '0.6rem', color: '#666', marginLeft: '4px'}}>
+                                    {msg.metadata ? `✓(${Object.keys(msg.metadata).length})` : '✗'}
+                                </span>
                             )}
                         </div>
+                        {visibleMetadataId === msg.id && (
+                            <MessageMetadata metadata={msg.metadata || {}} onOpenSettings={onOpenSettings} />
+                        )}
+                        <div className={`message-content ${!msg.is_bot ? 'user-content' : 'bot-content'}`}>
+                            <div
+                                className={`message ${!msg.is_bot ? 'user' : 'bot'} ${msg.pending ? 'pending' : ''} ${msg.error ? 'error' : ''}`}>
+                                {msg.is_bot ? (
+                                    <MarkdownRenderer content={msg.content} />
+                                ) : (
+                                    msg.content
+                                )}
+                                {msg.pending && (
+                                    <div className="message-spinner">
+                                        <div className="spinner-border spinner-border-sm ms-2" role="status">
+                                            <span className="visually-hidden">Loading...</span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     </div>
-                </div>
-            ))}
+                ))
+            )}
             <div ref={bottomRef}/>
         </div>
     );

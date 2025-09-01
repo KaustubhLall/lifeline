@@ -350,6 +350,7 @@ class MessageListCreateView(APIView):
                     "conversation_memories": len(conversation_memories),
                     "prompt_length": len(enhanced_prompt),
                     "history_messages_included": len(message_history),
+                    "debug_entry_id": None,
                 },
             )
 
@@ -431,6 +432,7 @@ class MessageListCreateView(APIView):
                             "step_details": agent_metadata.get("step_details", []),
                             "total_steps": agent_metadata.get("total_steps", 0),
                             "total_tokens": agent_metadata.get("total_tokens", 0),
+                            "used_memories": MemorySerializer(all_memories, many=True).data,  # Add memories here
                         },
                     )
 
@@ -513,12 +515,7 @@ class MessageListCreateView(APIView):
                         "mode": mode,
                         "latency_ms": latency_ms,
                         "token_usage": usage,
-                        "used_memories": len(all_memories),
-                        "relevant_memories": len(relevant_memories),
-                        "conversation_memories": len(conversation_memories),
-                        "prompt_length": len(enhanced_prompt),
-                        "response_length": len(bot_response_text),
-                        "history_messages_included": len(message_history),
+                        "used_memories": MemorySerializer(all_memories, many=True).data,  # Add memories here
                         "debug_entry_id": debug_entry.id,
                     },
                 )

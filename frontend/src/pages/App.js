@@ -18,11 +18,18 @@ function App() {
     const [showSignup, setShowSignup] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [input, setInput] = useState('');
-    const [selectedModel, setSelectedModel] = useState('gpt-5-mini-2025-08-07');
+    const [selectedModel, setSelectedModel] = useState(localStorage.getItem('selectedModel') || 'gpt-4o-mini');
     const [chatMode, setChatMode] = useState(localStorage.getItem('chatMode') || 'agent');
     const [temperature, setTemperature] = useState(0.2);
+    const [showUserSettings, setShowUserSettings] = useState(false);
+    const [activeTab, setActiveTab] = useState('Profile'); // Default tab
+    const [isSending, setIsSending] = useState(false); // State for sending status
 
-    // Persist chat mode selection
+    // Persist chat model and mode selection
+    useEffect(() => {
+        localStorage.setItem('selectedModel', selectedModel);
+    }, [selectedModel]);
+
     useEffect(() => {
         localStorage.setItem('chatMode', chatMode);
     }, [chatMode]);
@@ -64,10 +71,10 @@ function App() {
 
     // Available AI models and chat modes
     const models = [
+        {value: 'gpt-4o-mini', label: 'GPT-4o Mini'},
+        {value: 'gpt-4o', label: 'GPT-4o'},
         {value: 'gpt-5-mini-2025-08-07', label: 'GPT-5 Mini (2025-08-07)'},
         {value: 'gpt-4.1-nano', label: 'GPT-4.1 Nano'},
-        {value: 'gpt-4o', label: 'GPT-4o'},
-        {value: 'gpt-4o-mini', label: 'GPT-4o Mini'},
         {value: 'gpt-4.1', label: 'GPT-4.1'}
     ];
 
@@ -93,12 +100,13 @@ function App() {
     };
 
     // Open/close settings modal
-    const handleOpenSettings = () => {
-        setShowSettings(true);
+    const handleOpenSettings = (tabName) => {
+        setActiveTab(tabName);
+        setShowUserSettings(true);
     };
 
     const handleCloseSettings = () => {
-        setShowSettings(false);
+        setShowUserSettings(false);
     };
 
     // Append speech transcription to input
@@ -122,9 +130,24 @@ function App() {
             return;
         }
 
+        setIsSending(true); // Set sending status to true
         console.log(`App.js: Sending message to conversation ${currentId}`);
         await sendMessage(input, selectedModel, chatMode, userId, temperature, currentId);
         setInput('');
+        setIsSending(false); // Set sending status to false
+    };
+
+    const handleQuickAction = async (prompt) => {
+        if (!currentId) {
+            console.warn('handleQuickAction: No active conversation');
+            // Optionally, create a new chat here if desired
+            // await handleNewChat();
+            return;
+        }
+        // Set the input to the prompt for clarity, then send
+        setInput(prompt);
+        await sendMessage(prompt, selectedModel, chatMode, userId, temperature, currentId);
+        setInput(''); // Clear input after sending
     };
 
     // Select a conversation and close sidebar
@@ -153,12 +176,13 @@ function App() {
             {error && <ErrorToast message={error} onClose={clearError}/>}
 
             {/* User Settings Modal */}
-            {showSettings && (
+            {showUserSettings && (
                 <div className="settings-overlay" onClick={handleCloseSettings}>
                     <UserSettings
                         onClose={handleCloseSettings}
                         username={username}
                         userId={userId}
+                        activeTab={activeTab}
                     />
                 </div>
             )}
@@ -198,10 +222,16 @@ function App() {
 
                 {/* Chat area */}
                 <div className="chat-area">
-                    <ChatWindow messages={messages} username={username}/>
+                    <ChatWindow
+                        messages={messages}
+                        username={username}
+                        onQuickAction={handleQuickAction}
+                        onOpenSettings={handleOpenSettings}
+                    />
                     <ChatInput
                         onSend={handleSend}
                         onSTT={handleSTTWithInput}
+                        isSending={isSending} // Pass sending status to input
                         input={input}
                         setInput={setInput}
                         sttActive={sttActive}

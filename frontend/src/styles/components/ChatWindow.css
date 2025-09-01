@@ -7,11 +7,59 @@
     background-color: var(--chat-bg);
 }
 
+.quick-actions-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    flex-direction: column;
+}
+
+.quick-actions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    width: 100%;
+    max-width: 700px;
+}
+
+.quick-action-btn {
+    background-color: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: space-between;
+    height: 120px;
+}
+
+.quick-action-btn:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-color: var(--primary-color);
+}
+
+.quick-action-btn i {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+    color: var(--primary-color);
+}
+
+.quick-action-btn span {
+    font-size: 1rem;
+    color: var(--text-color);
+    font-weight: 500;
+}
+
 .message-container {
     margin-bottom: 1.5rem;
 }
 
-/* Metadata panel positioning */
 .message-container > .message-metadata-container {
     margin-bottom: 0.5rem;
     margin-left: 0;
@@ -21,10 +69,17 @@
 
 .message-header {
     display: flex;
+    justify-content: space-between;
     align-items: center;
     margin-bottom: 0.5rem;
-    font-size: 0.875rem;
-    color: var(--text-muted);
+    font-size: 0.9rem;
+    color: var(--text-color);
+}
+
+.message-header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
 .message-header.user {
@@ -35,11 +90,39 @@
     justify-content: flex-start;
 }
 
+.message-actions {
+    display: flex;
+    align-items: center;
+    opacity: 0;
+    transition: opacity 0.2s ease-in-out;
+}
+
+.message-container:hover .message-actions {
+    opacity: 1;
+}
+
+.message-action-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    margin-left: 4px;
+    font-size: 0.9rem;
+}
+
+.message-action-btn:hover {
+    color: var(--text-color);
+    background-color: var(--hover-bg);
+}
+
 .message-sender {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
     font-weight: 600;
+    color: var(--text-color);
+    gap: 0.5rem;
 }
 
 .metadata-toggle-btn {
@@ -73,15 +156,13 @@
     opacity: 1;
 }
 
-.message-sender .bi {
-    margin-right: 8px;
+.message-sender i {
     font-size: 1.2rem;
 }
 
 .message-timestamp {
     font-size: 0.75rem;
-    color: var(--text-light);
-    margin-left: 0.5rem;
+    color: var(--text-muted);
 }
 
 .message-header.user .message-timestamp {
@@ -92,6 +173,7 @@
 
 .message-content {
     display: flex;
+    padding-left: 0;
 }
 
 .message-content.user-content {
@@ -374,4 +456,57 @@
     .chat-window {
         padding: 0.5rem;
     }
+}
+
+/* Code block styling */
+.code-block-container {
+    position: relative;
+    margin: 1rem 0;
+    border-radius: 8px;
+    overflow: hidden;
+    background-color: #2d2d2d; /* Corresponds to 'tomorrow' theme background */
+}
+
+.code-block-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: #222;
+    padding: 0.5rem 1rem;
+    color: #ccc;
+    font-size: 0.85rem;
+}
+
+.language-name {
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+.copy-code-btn {
+    background-color: #444;
+    color: #eee;
+    border: none;
+    padding: 0.3rem 0.6rem;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    transition: background-color 0.2s ease;
+}
+
+.copy-code-btn:hover {
+    background-color: #555;
+}
+
+.copy-code-btn .bi {
+    font-size: 0.9rem;
+}
+
+/* Ensure syntax highlighter has no extra margin */
+.code-block-container pre {
+    margin: 0 !important;
+    border-radius: 0 0 8px 8px !important;
+    padding-top: 1rem !important; /* Add some space from the header */
 }

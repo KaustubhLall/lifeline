@@ -6,6 +6,7 @@ export function useConversations(authenticated, onLogout) {
     const [currentId, setCurrentId] = useState(null);
     const [messages, setMessages] = useState([]);
     const [error, setError] = useState(null);
+    const [isSending, setIsSending] = useState(false);
 
     // Auto-refresh state for detecting title changes
     const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
@@ -104,7 +105,7 @@ export function useConversations(authenticated, onLogout) {
             refreshTimeoutRef.current = setTimeout(() => {
                 console.log('🔄 Auto-refreshing conversations for title updates...');
                 refreshConversations();
-            }, AUTO_REFRESH_DELAY_MS); // 3 second delay to allow backend auto-titling to complete
+            }, 3000); // 3 second delay to allow backend auto-titling to complete
         }
 
         return () => {
@@ -186,6 +187,8 @@ export function useConversations(authenticated, onLogout) {
             return;
         }
 
+        setIsSending(true);
+
         console.log(`Sending message to conversation ${targetConversationId} (currentId: ${currentId})`);
 
         const tempId = Date.now();
@@ -241,7 +244,7 @@ export function useConversations(authenticated, onLogout) {
                     setTimeout(() => {
                         setAutoRefreshEnabled(false);
                         console.log(`⏰ Auto-refresh timeout reached, disabling for conversation ${targetConversationId}`);
-                    }, AUTO_REFRESH_TIMEOUT_MS); // 15 seconds should be enough for backend processing
+                    }, 15000); // 15 seconds should be enough for backend processing
                 }
 
                 return newMessages;
@@ -256,6 +259,8 @@ export function useConversations(authenticated, onLogout) {
 
             setError(errorMessage);
             setMessages(m => m.map(msg => msg.id === tempId ? {...msg, pending: false, error: true} : msg));
+        } finally {
+            setIsSending(false);
         }
     }, [currentId, conversations, isDefaultTitle]);
 
@@ -285,6 +290,7 @@ export function useConversations(authenticated, onLogout) {
         setCurrentId,
         messages,
         error,
+        isSending,
         handleNewChat,
         sendMessage,
         clearError,

@@ -1,7 +1,7 @@
 import React from 'react';
 import '../styles/components/MessageMetadata.css';
 
-function MessageMetadata({metadata}) {
+function MessageMetadata({metadata, onOpenSettings}) {
     // Always render, but show "No metadata available" if empty
     const hasMetadata = metadata && Object.keys(metadata).length > 0;
 
@@ -21,6 +21,9 @@ function MessageMetadata({metadata}) {
         total_steps,
         total_tokens
     } = metadata;
+
+    // Ensure used_memories is an array
+    const memories = Array.isArray(used_memories) ? used_memories : [];
 
     return (
         <div className="message-metadata-container">
@@ -67,10 +70,10 @@ function MessageMetadata({metadata}) {
                                 <span className="metadata-value">{history_messages_included} messages</span>
                             </div>
                         )}
-                        {used_memories !== undefined && (
+                        {memories.length > 0 && (
                             <div className="metadata-item">
                                 <span className="metadata-label">Memories</span>
-                                <span className="metadata-value">{used_memories} used</span>
+                                <span className="metadata-value">{memories.length} used</span>
                             </div>
                         )}
                         {mode === 'agent' && total_steps !== undefined && (
@@ -84,6 +87,29 @@ function MessageMetadata({metadata}) {
                                 <span className="metadata-label">Agent Tokens</span>
                                 <span className="metadata-value">{total_tokens}</span>
                             </div>
+                        )}
+                    </div>
+
+                    <div className="memory-details">
+                        <div className="memory-header">
+                            <h4 className="memory-title">🧠 Used Memories ({memories.length})</h4>
+                            <button onClick={() => onOpenSettings('Memories')} className="manage-memories-btn">
+                                Manage Memories
+                            </button>
+                        </div>
+                        {memories.length > 0 ? (
+                            <ul className="memory-list">
+                                {memories.map((memory, index) => (
+                                    <li key={index} className="memory-item">
+                                        <p className="memory-content">{memory.content}</p>
+                                        {memory.score !== undefined && (
+                                            <span className="memory-score">Score: {memory.score.toFixed(3)}</span>
+                                        )}
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p className="memory-empty">No memories were used for this response.</p>
                         )}
                     </div>
 
