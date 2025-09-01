@@ -1,6 +1,12 @@
+# Issue tracking temporary files
+issue_status.json
+progress_report_*.md
+sprint_plan_*.md
+weekly_report_*.md
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
-*.py[codz]
+*.py[cod]
 *$py.class
 
 # C extensions
