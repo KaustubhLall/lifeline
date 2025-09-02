@@ -432,6 +432,13 @@ class MessageListCreateView(APIView):
                             "step_details": agent_metadata.get("step_details", []),
                             "total_steps": agent_metadata.get("total_steps", 0),
                             "total_tokens": agent_metadata.get("total_tokens", 0),
+                            # New detailed token and timing fields
+                            "agent_tokens": agent_metadata.get("agent_tokens", 0),
+                            "tool_tokens": agent_metadata.get("tool_tokens", 0),
+                            "tool_step_tokens_total": agent_metadata.get("tool_step_tokens_total", 0),
+                            "steps_total_duration_ms": agent_metadata.get("steps_total_duration_ms", 0),
+                            "tools_total_duration_ms": agent_metadata.get("tools_total_duration_ms", 0),
+                            "tools_token_breakdown": agent_metadata.get("tools_token_breakdown", []),
                             "used_memories": MemorySerializer(all_memories, many=True).data,  # Add memories here
                         },
                     )

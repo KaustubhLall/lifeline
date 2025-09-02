@@ -18,6 +18,8 @@ from ..utils.constants import (
     AUDIO_SEEK_END_POSITION,
     TTS_DEFAULT_MODEL,
     TTS_DEFAULT_VOICE,
+    TRANSCRIBE_DEFAULT_MODEL,
+    MEMORY_EXTRACTION_MODEL_DEFAULT,
 )
 
 # Configure logging with filename and line numbers
@@ -141,7 +143,7 @@ def call_llm_text(prompt: str, model: str = DEFAULT_MODEL, temperature: float = 
             raise LLMError(f"Error generating response: {e}")
 
 
-def call_llm_transcribe(audio_file_path: str, model: str = "gpt-4o-mini-transcribe") -> str:
+def call_llm_transcribe(audio_file_path: str, model: str = TRANSCRIBE_DEFAULT_MODEL) -> str:
     """
     Transcribe audio to text.
 
@@ -184,7 +186,7 @@ def call_llm_transcribe(audio_file_path: str, model: str = "gpt-4o-mini-transcri
         raise AudioProcessingError(f"Failed to transcribe audio: {e}")
 
 
-def call_llm_transcribe_memory(audio_file, model: str = "gpt-4o-mini-transcribe") -> str:
+def call_llm_transcribe_memory(audio_file, model: str = TRANSCRIBE_DEFAULT_MODEL) -> str:
     """
     Transcribe audio to text using in-memory file object.
 
@@ -289,7 +291,7 @@ def call_llm_embedding(text: str, model: str = EMBEDDING_DEFAULT_MODEL) -> list:
 
 
 def call_llm_conversation_memory_extraction(
-    user_message: str, ai_response: str, current_date: str = None, model: str = "gpt-4o-mini"
+    user_message: str, ai_response: str, current_date: str = None, model: str = MEMORY_EXTRACTION_MODEL_DEFAULT
 ) -> dict:
     """
     Extract memorable information from a conversation pair (user question + AI response).

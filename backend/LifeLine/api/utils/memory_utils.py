@@ -17,6 +17,7 @@ from ..utils.constants import (
     MEMORY_RECENCY_DAYS_DIVISOR,
     MEMORY_CONTEXT_SIMILARITY_WEIGHT,
     MEMORY_IMPORTANCE_CONTEXT_WEIGHT,
+    MEMORY_EXTRACTION_MODEL_DEFAULT,
 )
 from ..utils.llm import call_llm_embedding, call_llm_memory_extraction, call_llm_conversation_memory_extraction
 
@@ -65,7 +66,7 @@ def extract_and_store_conversation_memory(user_message: Message, ai_message: Mes
 
         # Enhanced metadata for conversation-based memories
         metadata = {
-            "extraction_model": "gpt-4o-mini",
+            "extraction_model": MEMORY_EXTRACTION_MODEL_DEFAULT,
             "extracted_at": str(timezone.now()),
             "extraction_date": current_date,
             "source_user_message_id": user_message.id,
@@ -155,7 +156,7 @@ def extract_and_store_memory(message: Message, user) -> Optional[Memory]:
             is_auto_extracted=True,
             extraction_confidence=memory_data.get("confidence", DEFAULT_CONFIDENCE_SCORE),
             metadata={
-                "extraction_model": "gpt-4o-mini",
+                "extraction_model": MEMORY_EXTRACTION_MODEL_DEFAULT,
                 "extracted_at": str(timezone.now()),
                 "source_message_length": len(message.content),
                 "embedding_dimensions": len(embedding) if embedding else DEFAULT_EMBEDDING_DIMENSIONS,

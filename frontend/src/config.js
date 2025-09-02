@@ -55,6 +55,10 @@ const getApiUrl = () => {
     return apiUrl;
 };
 
+// Centralized frontend defaults to align with backend constants
+export const DEFAULT_MODEL = 'gpt-4.1-nano';
+export const TRANSCRIBE_DEFAULT_MODEL = 'gpt-4o-mini-transcribe';
+
 const config = {
     API_URL: getApiUrl(),
     DEBUG: process.env.NODE_ENV === 'development'

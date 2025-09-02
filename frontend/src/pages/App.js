@@ -18,7 +18,7 @@ function App() {
     const [showSignup, setShowSignup] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [input, setInput] = useState('');
-    const [selectedModel, setSelectedModel] = useState(localStorage.getItem('selectedModel') || 'gpt-4o-mini');
+    const [selectedModel, setSelectedModel] = useState(localStorage.getItem('selectedModel') || 'gpt-4.1-nano');
     const [chatMode, setChatMode] = useState(localStorage.getItem('chatMode') || 'agent');
     const [temperature, setTemperature] = useState(0.2);
     const [showUserSettings, setShowUserSettings] = useState(false);
