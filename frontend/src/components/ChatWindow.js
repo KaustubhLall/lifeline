@@ -180,7 +180,7 @@ function ChatWindow({messages, username, onQuickAction, onOpenSettings}) {
                                         <>
                                             <span>{username || 'User'}</span>
                                             <i className="bi bi-person-circle"></i>
-                                        </> 
+                                        </>
                                     ) : (
                                         <>
                                             <i className="bi bi-robot"></i>
